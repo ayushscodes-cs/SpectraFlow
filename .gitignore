@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+dist/
+dist-electron/
+release/
+
+# Environment and sensitive keys
+.env
+.env.local
+.env.*.local
+*.pem
+
+# Logs and databases
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# OS generated
+.DS_Store
+Thumbs.db
