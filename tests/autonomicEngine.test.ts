@@ -1,63 +1,66 @@
 import { describe, it, expect } from 'vitest';
 import { AutonomicEngine } from '../src/main/autonomicEngine';
 
-describe('AutonomicEngine - Physiological Coherence & Strain Analysis', () => {
-  it('should initialize with default state and calculate flow coherence from stable vitals', () => {
+describe('AutonomicEngine - Non-Medical Focus Rhythm & Signal Validation', () => {
+  it('should calculate flow coherence score only when signal confidence is high', () => {
     const engine = new AutonomicEngine();
     const payload = engine.processSample({
       pulseRate: 72,
       pulseConfidence: 0.95,
       breathingRate: 12,
+      breathingConfidence: 0.90,
       chestDisplacement: 0.45,
       isBlinking: false,
     });
 
     expect(payload.pulseRate).toBe(72);
     expect(payload.breathingRate).toBe(12);
+    expect(payload.signalQuality).toBe('EXCELLENT');
     expect(payload.flowCoherenceScore).toBeGreaterThanOrEqual(80);
-    expect(payload.autonomicState).toBe('DEEP_FLOW');
+    expect(payload.rhythmState).toBe('STABLE_FOCUS');
   });
 
-  it('should detect screen apnea when respiratory motion pauses for extended duration', () => {
+  it('should withhold flow coherence score when signal confidence is insufficient', () => {
     const engine = new AutonomicEngine();
     
-    // First sample establishes initial chest movement
-    engine.processSample({
-      pulseRate: 74,
-      chestDisplacement: 0.5,
-    });
-
-    // Simulate apnea by freezing chest displacement for 8 seconds
-    const futureTime = Date.now() + 8500;
+    // Simulate elapsed session warmup
+    const futureTime = Date.now() + 25000;
     const originalNow = Date.now;
     global.Date.now = () => futureTime;
 
-    const apneaPayload = engine.processSample({
-      pulseRate: 88,
-      chestDisplacement: 0.501, // negligible motion
+    const payload = engine.processSample({
+      pulseRate: 74,
+      pulseConfidence: 0.15, // Low confidence
+      breathingRate: null,
+      breathingConfidence: 0.10,
     });
 
     global.Date.now = originalNow;
 
-    expect(apneaPayload.screenApneaDetected).toBe(true);
-    expect(apneaPayload.autonomicState).toBe('SYMPATHETIC_STRAIN');
+    expect(payload.signalQuality).toBe('LOW_CONFIDENCE');
+    expect(payload.flowCoherenceScore).toBeNull();
+    expect(payload.rhythmState).toBe('AWAITING_SIGNAL');
   });
 
-  it('should detect ocular fixation strain when blink rate is abnormally low', () => {
+  it('should track blink rate as an experimental non-clinical interaction heuristic', () => {
     const engine = new AutonomicEngine();
     
-    // Process single blink
+    // First sample with blink
     engine.processSample({
       isBlinking: true,
       pulseRate: 70,
+      pulseConfidence: 0.8,
     });
 
+    // Second sample without blink
     const payload = engine.processSample({
       isBlinking: false,
       pulseRate: 70,
+      pulseConfidence: 0.8,
     });
 
-    expect(payload.blinkRatePerMin).toBe(1);
-    expect(payload.eyeStrainDetected).toBe(true);
+    expect(payload.totalBlinksDetected).toBe(1);
+    expect(payload.isTalking).toBe(false);
   });
 });
+

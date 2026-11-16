@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import { SmartSpectraService } from './smartspectraService';
 import { ProcessingLifecycleStatus, VitalsTelemetryPayload } from '../types/telemetry';
 
+// Ensure dotenv loads from the workspace root directory reliably
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config();
 
 let mainWindow: BrowserWindow | null = null;
@@ -44,6 +46,11 @@ function createWindow() {
     (status: ProcessingLifecycleStatus) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('spectra:lifecycle', status);
+      }
+    },
+    (state: any, errorMsg?: string) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('spectra:authState', state, errorMsg);
       }
     },
     (errMsg: string) => {

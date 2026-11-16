@@ -1,6 +1,8 @@
 import {
   VitalsTelemetryPayload,
   ProcessingLifecycleStatus,
+  AuthenticationState,
+  SystemStatusPayload,
 } from '../types/telemetry';
 import { AutonomicEngine } from './autonomicEngine';
 
@@ -8,17 +10,29 @@ export class SmartSpectraService {
   private sdkInstance: any = null;
   private autonomicEngine: AutonomicEngine;
   private lifecycle: ProcessingLifecycleStatus = 'IDLE';
+  private authState: AuthenticationState = 'NOT_CONFIGURED';
+  private authErrorMessage: string = '';
   private simulatorTimer: NodeJS.Timeout | null = null;
   private telemetryCallback: ((payload: VitalsTelemetryPayload) => void) | null = null;
   private lifecycleCallback: ((status: ProcessingLifecycleStatus) => void) | null = null;
+  private authStateCallback: ((state: AuthenticationState, errorMsg?: string) => void) | null = null;
   private errorCallback: ((err: string) => void) | null = null;
   private apiKey: string = '';
   private devSimulatorEnabled: boolean = false;
+  private lastValidationHint: string = '';
 
   constructor() {
     this.autonomicEngine = new AutonomicEngine();
-    this.apiKey = process.env.SMARTSPECTRA_API_KEY || '';
-    this.devSimulatorEnabled = process.env.DEV_SIMULATOR === 'true' || !this.apiKey;
+    this.apiKey = (process.env.SMARTSPECTRA_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+    this.devSimulatorEnabled = process.env.DEV_SIMULATOR === 'true';
+
+    if (!this.apiKey) {
+      this.authState = 'NOT_CONFIGURED';
+      this.authErrorMessage = 'No API key provided in .env';
+    } else {
+      // Configured, pending verification by native SDK handshake
+      this.authState = 'CONFIGURING';
+    }
   }
 
   public getAvailableCameras() {
@@ -36,21 +50,26 @@ export class SmartSpectraService {
     }
   }
 
-  public getStatus() {
+  public getStatus(): SystemStatusPayload {
     return {
-      hasValidApiKey: Boolean(this.apiKey && this.apiKey.trim().length > 10),
+      hasConfiguredApiKey: Boolean(this.apiKey && this.apiKey.length > 5),
+      authState: this.authState,
+      authErrorMessage: this.authErrorMessage,
       lifecycle: this.lifecycle,
       isDevSimulator: this.devSimulatorEnabled,
+      telemetryDisclosed: true,
     };
   }
 
   public setCallbacks(
     onTelemetry: (payload: VitalsTelemetryPayload) => void,
     onLifecycle: (status: ProcessingLifecycleStatus) => void,
+    onAuthState: (state: AuthenticationState, errorMsg?: string) => void,
     onError: (err: string) => void
   ) {
     this.telemetryCallback = onTelemetry;
     this.lifecycleCallback = onLifecycle;
+    this.authStateCallback = onAuthState;
     this.errorCallback = onError;
   }
 
@@ -61,6 +80,14 @@ export class SmartSpectraService {
     }
   }
 
+  private setAuthState(state: AuthenticationState, errorMsg?: string) {
+    this.authState = state;
+    this.authErrorMessage = errorMsg || '';
+    if (this.authStateCallback) {
+      this.authStateCallback(state, errorMsg);
+    }
+  }
+
   public async start(cameraId?: string): Promise<{ success: boolean; message?: string }> {
     if (this.lifecycle === 'PROCESSING') {
       return { success: true };
@@ -68,10 +95,12 @@ export class SmartSpectraService {
 
     this.autonomicEngine.reset();
 
-    // If an API key is present, attempt Genuine Live SDK Initialization
-    if (this.apiKey && this.apiKey.trim().length > 10) {
+    // If an API key is present and simulator is not explicitly forced
+    if (this.apiKey && this.apiKey.length > 10 && !this.devSimulatorEnabled) {
       try {
         this.setLifecycle('INITIALIZING');
+        this.setAuthState('SDK_INITIALIZING');
+
         const {
           SmartSpectraSDK,
           CameraSelection,
@@ -79,8 +108,10 @@ export class SmartSpectraService {
           breathingMetrics,
           faceMetrics,
           decodeMetrics,
+          SmartSpectraErrorCode,
         } = require('@smartspectra/node-sdk');
 
+        // STRICT METRICS: Only documented bundles
         this.sdkInstance = new SmartSpectraSDK({
           apiKey: this.apiKey,
           requestedMetrics: [
@@ -88,6 +119,7 @@ export class SmartSpectraService {
             ...breathingMetrics,
             ...faceMetrics,
           ],
+          enableTelemetry: true, // Transparently disclosed
         });
 
         if (cameraId && cameraId !== 'default') {
@@ -100,13 +132,26 @@ export class SmartSpectraService {
           this.sdkInstance.useCamera(CameraSelection.default);
         }
 
-        this.sdkInstance.on('processingStatus', (status: string) => {
+        this.setAuthState('CAMERA_READY');
+
+        this.sdkInstance.on('processingStatus', (status: any) => {
           console.log('[SmartSpectra] Status update:', status);
-          if (status.includes('WARM') || status.includes('CALIBRAT')) {
+          const strStatus = String(status);
+          if (strStatus.includes('WARM') || strStatus.includes('CALIBRAT') || strStatus === '1') {
             this.setLifecycle('CALIBRATING');
-          } else if (status.includes('PROCESS')) {
+          } else if (strStatus.includes('PROCESS') || strStatus === '2') {
             this.setLifecycle('PROCESSING');
+            // If processing starts without fatal auth failure, SDK is active
+            if (this.authState !== 'AUTHENTICATED') {
+              this.setAuthState('AUTHENTICATED');
+            }
+          } else if (strStatus === '5') {
+            this.setLifecycle('STOPPED');
           }
+        });
+
+        this.sdkInstance.on('validationStatus', (code: any, ts: any, hint: any) => {
+          this.lastValidationHint = hint || '';
         });
 
         this.sdkInstance.on('metrics', (buf: Buffer, timestampUs: number) => {
@@ -114,31 +159,38 @@ export class SmartSpectraService {
             const metrics = decodeMetrics(buf) as any;
             if (!metrics || Buffer.isBuffer(metrics)) return;
 
-            const pulse = metrics.cardio?.pulseRate?.at(-1)?.value || null;
-            const pulseConf = metrics.cardio?.pulseRate?.at(-1)?.confidence || 0.8;
-            const ppg = metrics.cardio?.arterialPressureTrace?.at(-1)?.value || null;
+            const pulse = metrics.cardio?.pulseRate?.at(-1)?.value ?? null;
+            const pulseConf = metrics.cardio?.pulseRate?.at(-1)?.confidence ?? 0;
+            const ppg = metrics.cardio?.arterialPressureTrace?.at(-1)?.value ?? null;
+            const hrv = metrics.cardio?.hrv?.at(-1)?.value ?? null;
+            const hrvConf = metrics.cardio?.hrv?.at(-1)?.confidence ?? 0;
 
-            const breathRate = metrics.breathing?.rate?.at(-1)?.value || null;
-            const chestDisp = metrics.breathing?.chestBreathing?.at(-1)?.value || null;
+            const breathRate = metrics.breathing?.rate?.at(-1)?.value ?? null;
+            const breathConf = metrics.breathing?.rate?.at(-1)?.confidence ?? 0;
+            const chestDisp = metrics.breathing?.chestBreathing?.at(-1)?.value ?? null;
 
             const blinking = Boolean(metrics.face?.blinking?.at(-1)?.detected);
+            const talking = Boolean(metrics.face?.talking?.at(-1)?.detected);
             const expression = metrics.face?.expression?.at(-1)?.value;
 
             const telemetry = this.autonomicEngine.processSample({
               pulseRate: pulse,
               pulseConfidence: pulseConf,
               ppgTrace: ppg,
+              hrvRmssd: hrv,
+              hrvConfidence: hrvConf,
               breathingRate: breathRate,
+              breathingConfidence: breathConf,
               chestDisplacement: chestDisp,
               isBlinking: blinking,
+              isTalking: talking,
               expression,
+              validationHint: this.lastValidationHint,
+              isSimulated: false,
             });
 
             if (this.telemetryCallback) {
-              this.telemetryCallback({
-                ...telemetry,
-                isSimulated: false,
-              });
+              this.telemetryCallback(telemetry);
             }
           } catch (e: any) {
             console.error('[SmartSpectra] Metrics decode error:', e);
@@ -147,8 +199,16 @@ export class SmartSpectraService {
 
         this.sdkInstance.on('error', (err: any) => {
           console.error('[SmartSpectra] Native error:', err);
+          const errorCode = typeof err === 'number' ? err : err?.code;
+          
+          if (errorCode === 2 || String(err).includes('AuthenticationFailed') || String(err).includes('401')) {
+            this.setAuthState('AUTHENTICATION_FAILED', 'API key authorization failed with Presage server (HTTP 401). Please verify key at physiology.presagetech.com.');
+          } else {
+            this.setAuthState('ERROR', typeof err === 'object' ? err?.message : String(err));
+          }
+
           if (this.errorCallback) {
-            this.errorCallback(err?.message || 'SmartSpectra Native Processing Error');
+            this.errorCallback(typeof err === 'object' ? err?.message || JSON.stringify(err) : String(err));
           }
           this.setLifecycle('ERROR');
         });
@@ -158,7 +218,7 @@ export class SmartSpectraService {
         return { success: true };
       } catch (err: any) {
         console.error('[SmartSpectra] SDK startup failed:', err);
-        // Fallback to simulator if API key or native stream fails, with honest label
+        this.setAuthState('ERROR', err?.message || 'SDK Initialization failed');
         this.startDevelopmentSimulator();
         return {
           success: true,
@@ -166,11 +226,10 @@ export class SmartSpectraService {
         };
       }
     } else {
-      // Honest development simulator clearly isolated and tagged
       this.startDevelopmentSimulator();
       return {
         success: true,
-        message: 'No SMARTSPECTRA_API_KEY detected in .env. Started Development Laboratory Simulator with honest data labelling.',
+        message: 'Operating in Development Laboratory Simulator with transparently labelled simulated waveforms.',
       };
     }
   }
@@ -179,41 +238,40 @@ export class SmartSpectraService {
     this.setLifecycle('CALIBRATING');
     let tick = 0;
 
-    // Simulate realistic physiological respiratory (12 bpm) and cardiac (70 bpm) oscillation
+    // Realistic non-medical lab simulator for interface testing
     this.simulatorTimer = setInterval(() => {
       tick++;
-      if (tick === 5) {
+      if (tick === 8) {
         this.setLifecycle('PROCESSING');
       }
 
       const tSec = tick * 0.1;
-      // Respiration sinusoidal curve with slight noise (period ~5s = 12 bpm)
+      // Respiration wave (period ~5s = 12 rpm)
       const breathingWave = Math.sin((2 * Math.PI * tSec) / 5.0) * 0.6;
-      // Cardiac plethysmograph waveform (period ~0.85s = 70.5 bpm)
+      // Cardiac plethysmograph wave (period ~0.85s = 70.5 bpm)
       const ppgWave = Math.sin((2 * Math.PI * tSec) / 0.85) * 0.8 + Math.cos((4 * Math.PI * tSec) / 0.85) * 0.2;
 
       // Occasional natural blink (every ~4-6 seconds)
       const isBlinkTick = tick % 45 === 0;
 
-      // Occasional intentional screen apnea micro-period simulation after 40 seconds
-      const simulateApnea = tick > 250 && tick < 320;
-      const chestVal = simulateApnea ? 0.05 : breathingWave;
-
       const payload = this.autonomicEngine.processSample({
-        pulseRate: simulateApnea ? 84 : 71,
+        pulseRate: 72,
         pulseConfidence: 0.92,
         ppgTrace: ppgWave,
-        breathingRate: simulateApnea ? 9 : 13,
-        chestDisplacement: chestVal,
+        hrvRmssd: 42,
+        hrvConfidence: 0.85,
+        breathingRate: 13,
+        breathingConfidence: 0.88,
+        chestDisplacement: breathingWave,
         isBlinking: isBlinkTick,
-        expression: 'focused',
+        isTalking: false,
+        expression: 'neutral',
+        validationHint: 'Lab Simulator: Face Centered',
+        isSimulated: true, // HONESTLY TAGGED AS SIMULATED
       });
 
       if (this.telemetryCallback) {
-        this.telemetryCallback({
-          ...payload,
-          isSimulated: true, // HONESTLY TAGGED AS SIMULATED
-        });
+        this.telemetryCallback(payload);
       }
     }, 100);
   }

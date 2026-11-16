@@ -2,7 +2,7 @@
   "name": "spectraflow",
   "version": "1.0.0",
   "description": "SpectraFlow: Bio-Adaptive Deep Work Studio powered by Presage SmartSpectra SDK",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/main/index.js",
   "author": "Ayush",
   "license": "MIT",
   "scripts": {

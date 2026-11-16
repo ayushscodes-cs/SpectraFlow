@@ -1,114 +1,128 @@
 import {
   VitalsTelemetryPayload,
-  ProcessingLifecycleStatus,
 } from '../types/telemetry';
 
 export class AutonomicEngine {
   private lastBlinkTimes: number[] = [];
+  private totalBlinkCount: number = 0;
+  private wasBlinkingPreviousSample: boolean = false;
   private pulseHistory: number[] = [];
   private breathingHistory: number[] = [];
-  private lastBreathingMoveTime: number = Date.now();
-  private lastChestVal: number = 0;
-  private screenApneaActive: boolean = false;
-  private consecutiveApneaCycles: number = 0;
+  private sessionStartTime: number = Date.now();
 
   public processSample(raw: {
     pulseRate?: number | null;
     pulseConfidence?: number;
     ppgTrace?: number | null;
+    hrvRmssd?: number | null;
+    hrvConfidence?: number;
     breathingRate?: number | null;
+    breathingConfidence?: number;
     chestDisplacement?: number | null;
     isBlinking?: boolean;
+    isTalking?: boolean;
     expression?: string;
+    validationHint?: string;
+    isSimulated?: boolean;
   }): VitalsTelemetryPayload {
     const now = Date.now();
 
-    // 1. Process Blinks & Eye Strain
-    if (raw.isBlinking) {
+    // 1. Process Blinks: Discrete Edge Detection (False -> True transition)
+    const currentBlink = Boolean(raw.isBlinking);
+    if (currentBlink && !this.wasBlinkingPreviousSample) {
+      this.totalBlinkCount++;
       this.lastBlinkTimes.push(now);
     }
-    // Retain blinks in the last 60 seconds
+    this.wasBlinkingPreviousSample = currentBlink;
+
+    // Rolling window for rate calculation: blinks within the last 60 seconds
     this.lastBlinkTimes = this.lastBlinkTimes.filter((t) => now - t <= 60000);
-    const blinkRate = this.lastBlinkTimes.length;
-    // Normal blink rate is 12-20 bpm. Prolonged staring < 5 bpm indicates severe ocular strain
-    const eyeStrainDetected = blinkRate < 4 && this.lastBlinkTimes.length > 0;
+    const sessionElapsedMin = Math.max(0.1, (now - this.sessionStartTime) / 60000);
+    // Extrapolate safely during initial minute without crazy spikes
+    const rollingRate =
+      sessionElapsedMin < 1.0
+        ? Math.round(this.lastBlinkTimes.length / sessionElapsedMin)
+        : this.lastBlinkTimes.length;
 
-    // 2. Screen Apnea Detection (Arresting breath during cognitive load)
-    const chest = raw.chestDisplacement ?? 0;
-    const deltaChest = Math.abs(chest - this.lastChestVal);
-    this.lastChestVal = chest;
-
-    if (deltaChest > 0.05) {
-      this.lastBreathingMoveTime = now;
-      this.consecutiveApneaCycles = 0;
-      this.screenApneaActive = false;
-    } else {
-      // If respiratory motion is paused for > 7 seconds during an active session
-      if (now - this.lastBreathingMoveTime > 7000) {
-        this.screenApneaActive = true;
-        this.consecutiveApneaCycles++;
-      }
-    }
-
-    // 3. Autonomic Equilibrium & Flow Coherence Calculation
     const pulse = raw.pulseRate ?? null;
-    const pulseConf = raw.pulseConfidence ?? 0.8;
+    const pulseConf = raw.pulseConfidence ?? 0;
     const breathing = raw.breathingRate ?? null;
+    const breathingConf = raw.breathingConfidence ?? 0;
 
-    if (pulse && pulse > 40 && pulse < 180) {
-      this.pulseHistory.push(pulse);
-      if (this.pulseHistory.length > 30) this.pulseHistory.shift();
-    }
-    if (breathing && breathing > 6 && breathing < 35) {
-      this.breathingHistory.push(breathing);
-      if (this.breathingHistory.length > 30) this.breathingHistory.shift();
+    // 2. Signal Quality Validation Gate
+    let signalQuality: VitalsTelemetryPayload['signalQuality'] = 'WARMING_UP';
+    const isWarmingUp = now - this.sessionStartTime < 15000;
+
+    if (pulseConf >= 0.7 && (breathingConf >= 0.7 || breathing === null)) {
+      signalQuality = 'EXCELLENT';
+    } else if (pulseConf >= 0.4 || breathingConf >= 0.4) {
+      signalQuality = 'ADEQUATE';
+    } else if (isWarmingUp) {
+      signalQuality = 'WARMING_UP';
+    } else {
+      signalQuality = 'LOW_CONFIDENCE';
     }
 
-    // Coherence logic: Ideal flow is characterized by stable cardiac cadence (60-80 bpm),
-    // diaphragmatic breathing rhythm (10-14 bpm), and regular blink cycles.
-    let coherence = 75; // baseline
-    if (pulse) {
-      if (pulse >= 60 && pulse <= 78) coherence += 10;
-      else if (pulse > 95) coherence -= 15; // sympathetic elevation
-    }
-    if (breathing) {
-      if (breathing >= 9 && breathing <= 15) coherence += 10;
-      else if (breathing > 22) coherence -= 15; // rapid shallow breathing
-    }
-    if (this.screenApneaActive) coherence -= 25;
-    if (eyeStrainDetected) coherence -= 10;
+    // 3. Transparent Cognitive Work Rhythm Score (Non-Medical)
+    let flowCoherenceScore: number | null = null;
+    let rhythmState: VitalsTelemetryPayload['rhythmState'] = 'AWAITING_SIGNAL';
 
-    const flowCoherenceScore = Math.max(10, Math.min(100, Math.round(coherence)));
+    if (signalQuality === 'EXCELLENT' || signalQuality === 'ADEQUATE') {
+      if (pulse) {
+        this.pulseHistory.push(pulse);
+        if (this.pulseHistory.length > 30) this.pulseHistory.shift();
+      }
+      if (breathing) {
+        this.breathingHistory.push(breathing);
+        if (this.breathingHistory.length > 30) this.breathingHistory.shift();
+      }
 
-    let autonomicState: VitalsTelemetryPayload['autonomicState'] = 'BALANCED_FOCUS';
-    if (flowCoherenceScore >= 82) autonomicState = 'DEEP_FLOW';
-    else if (this.screenApneaActive || (pulse && pulse > 95)) autonomicState = 'SYMPATHETIC_STRAIN';
-    else if (eyeStrainDetected || flowCoherenceScore < 50) autonomicState = 'FATIGUE_DRIFT';
+      let score = 70;
+      if (pulse && pulse >= 55 && pulse <= 85) score += 15;
+      if (breathing && breathing >= 10 && breathing <= 18) score += 15;
+      flowCoherenceScore = Math.max(10, Math.min(100, score));
+
+      if (flowCoherenceScore >= 80) {
+        rhythmState = 'STABLE_FOCUS';
+      } else {
+        rhythmState = 'ACTIVE_PACING';
+      }
+    } else if (signalQuality === 'WARMING_UP') {
+      rhythmState = 'WARMING_UP';
+    } else {
+      rhythmState = 'AWAITING_SIGNAL';
+    }
 
     return {
       timestamp: now,
       pulseRate: pulse,
       pulseConfidence: pulseConf,
       ppgTrace: raw.ppgTrace ?? null,
+      hrvRmssd: raw.hrvRmssd ?? null,
+      hrvConfidence: raw.hrvConfidence ?? 0,
       breathingRate: breathing,
-      breathingConfidence: breathing ? 0.85 : 0.4,
-      chestDisplacement: chest,
-      isBlinking: !!raw.isBlinking,
-      blinkRatePerMin: blinkRate,
-      screenApneaDetected: this.screenApneaActive,
-      eyeStrainDetected,
+      breathingConfidence: breathingConf,
+      chestDisplacement: raw.chestDisplacement ?? null,
+      isBlinking: currentBlink,
+      isTalking: Boolean(raw.isTalking),
+      totalBlinksDetected: this.totalBlinkCount,
+      blinkRatePerMin: Math.min(120, rollingRate),
       expression: raw.expression,
+      signalQuality,
+      validationHint: raw.validationHint,
       flowCoherenceScore,
-      autonomicState,
+      rhythmState,
+      isSimulated: Boolean(raw.isSimulated),
     };
   }
 
   public reset() {
     this.lastBlinkTimes = [];
+    this.totalBlinkCount = 0;
+    this.wasBlinkingPreviousSample = false;
     this.pulseHistory = [];
     this.breathingHistory = [];
-    this.lastBreathingMoveTime = Date.now();
-    this.screenApneaActive = false;
-    this.consecutiveApneaCycles = 0;
+    this.sessionStartTime = Date.now();
   }
 }
+

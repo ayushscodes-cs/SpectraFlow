@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
+  AuthenticationState,
   CameraDeviceInfo,
   ProcessingLifecycleStatus,
   SpectraIPCBridge,
@@ -27,6 +28,14 @@ const apiBridge: SpectraIPCBridge = {
       ipcRenderer.removeListener('spectra:lifecycle', handler);
     };
   },
+  onAuthStateChange: (callback: (state: AuthenticationState, errorMsg?: string) => void) => {
+    const handler = (_event: any, state: AuthenticationState, errorMsg?: string) =>
+      callback(state, errorMsg);
+    ipcRenderer.on('spectra:authState', handler);
+    return () => {
+      ipcRenderer.removeListener('spectra:authState', handler);
+    };
+  },
   onError: (callback: (errorMessage: string) => void) => {
     const handler = (_event: any, msg: string) => callback(msg);
     ipcRenderer.on('spectra:error', handler);
@@ -37,3 +46,4 @@ const apiBridge: SpectraIPCBridge = {
 };
 
 contextBridge.exposeInMainWorld('spectraBridge', apiBridge);
+

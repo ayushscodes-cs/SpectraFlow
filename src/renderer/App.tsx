@@ -1,56 +1,87 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Heart,
   Wind,
   Eye,
   Activity,
   Shield,
-  Volume2,
-  VolumeX,
   Play,
   Square,
-  AlertCircle,
   Sparkles,
-  RefreshCw,
   Clock,
   Compass,
+  Palette,
+  Sliders,
+  AlertCircle,
+  HelpCircle,
+  UserCheck,
 } from 'lucide-react';
-import { WaveCanvas } from './components/WaveCanvas';
+import { LivingWaveform } from './components/LivingWaveform';
+import { LivingObservatoryOrb } from './components/LivingObservatoryOrb';
+import { SoundStudioPanel } from './components/SoundStudioPanel';
 import { ConsentGate } from './components/ConsentGate';
 import { bioAudio } from './services/bioAudio';
 import {
+  AuthenticationState,
   CameraDeviceInfo,
   ProcessingLifecycleStatus,
   VitalsTelemetryPayload,
 } from '../types/telemetry';
 
 export const App: React.FC = () => {
+  // Theme state: 'midnight-flow' | 'warm-focus' | 'daylight'
+  const [currentTheme, setCurrentTheme] = useState<string>(() => {
+    return localStorage.getItem('spectra_theme') || 'midnight-flow';
+  });
+
   const [consentGranted, setConsentGranted] = useState<boolean>(false);
   const [cameras, setCameras] = useState<CameraDeviceInfo[]>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('default');
   const [lifecycle, setLifecycle] = useState<ProcessingLifecycleStatus>('IDLE');
-  const [telemetry, setTelemetry] = useState<VitalsTelemetryPayload | null>(null);
-  const [audioActive, setAudioActive] = useState<boolean>(false);
+  const [authState, setAuthState] = useState<AuthenticationState>('NOT_CONFIGURED');
+  const [authErrorMsg, setAuthErrorMsg] = useState<string>('');
+  const [hasConfiguredKey, setHasConfiguredKey] = useState<boolean>(false);
   const [isSimulatedMode, setIsSimulatedMode] = useState<boolean>(false);
-  const [sessionSeconds, setSessionSeconds] = useState<number>(0);
+
+  const [telemetry, setTelemetry] = useState<VitalsTelemetryPayload | null>(null);
+
+  // Authoritative Session State
   const [isFocusSessionActive, setIsFocusSessionActive] = useState<boolean>(false);
+  const [sessionStartTimeMs, setSessionStartTimeMs] = useState<number | null>(null);
+  const [sessionElapsedSec, setSessionElapsedSec] = useState<number>(0);
+  const [targetDurationMin, setTargetDurationMin] = useState<number>(25);
+  const [sessionObjective, setSessionObjective] = useState<string>('');
   const [showSummaryModal, setShowSummaryModal] = useState<boolean>(false);
 
-  // Focus metrics accumulator
-  const [sessionData, setSessionData] = useState<{
-    pulseReadings: number[];
-    breathingReadings: number[];
-    apneaCount: number;
+  // Sound Studio State
+  const [isAudioPlaying, setIsAudioPlaying] = useState<boolean>(false);
+  const [isAudioAdaptive, setIsAudioAdaptive] = useState<boolean>(true);
+  const [audioVolume, setAudioVolume] = useState<number>(0.5);
+  const [soundscapeMode, setSoundscapeMode] = useState<string>('Deep Binaural Alpha');
+
+  // Session Statistics Accumulator
+  const [sessionMetrics, setSessionMetrics] = useState<{
+    pulseSamples: number[];
+    breathingSamples: number[];
+    validFrameCount: number;
     peakFlow: number;
+    totalBlinks: number;
   }>({
-    pulseReadings: [],
-    breathingReadings: [],
-    apneaCount: 0,
+    pulseSamples: [],
+    breathingSamples: [],
+    validFrameCount: 0,
     peakFlow: 0,
+    totalBlinks: 0,
   });
 
+  // Apply Theme attribute to document
   useEffect(() => {
-    // Check if Spectra IPC Bridge is ready
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    localStorage.setItem('spectra_theme', currentTheme);
+  }, [currentTheme]);
+
+  // IPC Bridge Listeners
+  useEffect(() => {
     if (window.spectraBridge) {
       window.spectraBridge.getConsentStatus().then(setConsentGranted);
       window.spectraBridge.getAvailableCameras().then((cams) => {
@@ -58,6 +89,9 @@ export const App: React.FC = () => {
         if (cams.length > 0) setSelectedCamera(cams[0].id);
       });
       window.spectraBridge.getSystemStatus().then((status) => {
+        setHasConfiguredKey(status.hasConfiguredApiKey);
+        setAuthState(status.authState);
+        setAuthErrorMsg(status.authErrorMessage || '');
         setIsSimulatedMode(status.isDevSimulator);
         setLifecycle(status.lifecycle);
       });
@@ -65,23 +99,27 @@ export const App: React.FC = () => {
       const unsubTelemetry = window.spectraBridge.onVitalsTelemetry((payload) => {
         setTelemetry(payload);
 
-        // Feed to Web Audio engine for real-time generative bio-adaptation
+        // Modulate Web Audio engine when active and adaptive
         bioAudio.modulateWithVitals(payload.pulseRate, payload.chestDisplacement);
 
-        // Accumulate session stats if session is running
+        // Accumulate session stats
         if (isFocusSessionActive) {
-          setSessionData((prev) => {
+          setSessionMetrics((prev) => {
             const nextPulses = payload.pulseRate
-              ? [...prev.pulseReadings, payload.pulseRate]
-              : prev.pulseReadings;
+              ? [...prev.pulseSamples, payload.pulseRate]
+              : prev.pulseSamples;
             const nextBreaths = payload.breathingRate
-              ? [...prev.breathingReadings, payload.breathingRate]
-              : prev.breathingReadings;
+              ? [...prev.breathingSamples, payload.breathingRate]
+              : prev.breathingSamples;
+            const isValid =
+              payload.signalQuality === 'EXCELLENT' || payload.signalQuality === 'ADEQUATE';
+            const currentScore = payload.flowCoherenceScore ?? 0;
             return {
-              pulseReadings: nextPulses,
-              breathingReadings: nextBreaths,
-              apneaCount: payload.screenApneaDetected ? prev.apneaCount + 1 : prev.apneaCount,
-              peakFlow: Math.max(prev.peakFlow, payload.flowCoherenceScore),
+              pulseSamples: nextPulses,
+              breathingSamples: nextBreaths,
+              validFrameCount: isValid ? prev.validFrameCount + 1 : prev.validFrameCount,
+              peakFlow: Math.max(prev.peakFlow, currentScore),
+              totalBlinks: payload.totalBlinksDetected,
             };
           });
         }
@@ -91,23 +129,31 @@ export const App: React.FC = () => {
         setLifecycle(status);
       });
 
+      const unsubAuth = window.spectraBridge.onAuthStateChange((state, errorMsg) => {
+        setAuthState(state);
+        if (errorMsg) setAuthErrorMsg(errorMsg);
+      });
+
       return () => {
         unsubTelemetry();
         unsubLifecycle();
+        unsubAuth();
       };
     }
   }, [isFocusSessionActive]);
 
-  // Session clock timer
+  // Authoritative Timestamp-based Session Clock
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (isFocusSessionActive) {
-      timer = setInterval(() => {
-        setSessionSeconds((sec) => sec + 1);
-      }, 1000);
+    let interval: NodeJS.Timeout;
+    if (isFocusSessionActive && sessionStartTimeMs) {
+      interval = setInterval(() => {
+        const now = Date.now();
+        const diffSec = Math.floor((now - sessionStartTimeMs) / 1000);
+        setSessionElapsedSec(diffSec);
+      }, 500);
     }
-    return () => clearInterval(timer);
-  }, [isFocusSessionActive]);
+    return () => clearInterval(interval);
+  }, [isFocusSessionActive, sessionStartTimeMs]);
 
   const handleGrantConsent = async () => {
     if (window.spectraBridge) {
@@ -119,35 +165,53 @@ export const App: React.FC = () => {
   const handleToggleSensing = async () => {
     if (lifecycle === 'PROCESSING' || lifecycle === 'CALIBRATING') {
       await window.spectraBridge.stopSensing();
-      if (audioActive) {
+      if (isAudioPlaying) {
         bioAudio.stop();
-        setAudioActive(false);
+        setIsAudioPlaying(false);
       }
-      if (isFocusSessionActive) {
-        setIsFocusSessionActive(false);
-        setShowSummaryModal(true);
-      }
+      setIsFocusSessionActive(false);
+      setShowSummaryModal(true);
     } else {
+      const now = Date.now();
+      setSessionStartTimeMs(now);
+      setSessionElapsedSec(0);
+      setSessionMetrics({
+        pulseSamples: [],
+        breathingSamples: [],
+        validFrameCount: 0,
+        peakFlow: 0,
+        totalBlinks: 0,
+      });
+
       await window.spectraBridge.startSensing(selectedCamera);
       setIsFocusSessionActive(true);
-      setSessionSeconds(0);
-      setSessionData({
-        pulseReadings: [],
-        breathingReadings: [],
-        apneaCount: 0,
-        peakFlow: 0,
-      });
     }
   };
 
   const handleToggleAudio = () => {
-    if (audioActive) {
+    if (isAudioPlaying) {
       bioAudio.stop();
-      setAudioActive(false);
+      setIsAudioPlaying(false);
     } else {
       bioAudio.start();
-      setAudioActive(true);
+      setIsAudioPlaying(true);
     }
+  };
+
+  const handleToggleAdaptive = () => {
+    const next = !isAudioAdaptive;
+    bioAudio.setAdaptive(next);
+    setIsAudioAdaptive(next);
+  };
+
+  const handleVolumeChange = (vol: number) => {
+    setAudioVolume(vol);
+    bioAudio.setMasterVolume(vol);
+  };
+
+  const handleSoundscapeChange = (mode: string) => {
+    setSoundscapeMode(mode);
+    bioAudio.setSoundscapeMode(mode);
   };
 
   const formatTime = (secs: number) => {
@@ -157,210 +221,285 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0d14] text-slate-100 flex flex-col font-sans select-none">
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] flex flex-col font-sans select-none transition-colors duration-400">
       {/* Privacy Consent Gate */}
       {!consentGranted && (
         <ConsentGate
           onGrantConsent={handleGrantConsent}
+          authState={authState}
+          authErrorMessage={authErrorMsg}
+          hasConfiguredApiKey={hasConfiguredKey}
           isSimulatedMode={isSimulatedMode}
         />
       )}
 
-      {/* Top Navigation Bar */}
-      <header className="h-14 border-b border-slate-800/80 bg-slate-950/60 px-6 flex items-center justify-between backdrop-blur-md">
+      {/* TOP BAR: Living Observatory Header */}
+      <header className="h-16 border-b border-slate-800/80 bg-[var(--bg-secondary)] px-6 flex items-center justify-between backdrop-blur-xl z-20">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-teal-500 to-indigo-600 shadow-md shadow-teal-500/20">
-            <Activity className="h-4 w-4 text-white" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-teal-500 to-indigo-600 shadow-lg shadow-teal-500/25 text-white">
+            <Activity className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-              SpectraFlow
-              <span className="text-[10px] uppercase font-mono tracking-widest px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-400 border border-teal-500/20">
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-black tracking-tight text-white">SpectraFlow</h1>
+              <span className="text-[10px] font-mono tracking-widest uppercase px-2 py-0.5 rounded bg-teal-500/10 text-teal-300 border border-teal-500/25">
                 Studio
               </span>
-            </h1>
+            </div>
+            <p className="text-[11px] text-slate-400 font-medium">Bio-Adaptive Deep Work</p>
           </div>
         </div>
 
-        {/* Status Indicator */}
+        {/* Status Pills & Controls */}
         <div className="flex items-center gap-4 text-xs font-mono">
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800">
+          {/* Auth / SDK Status Badge */}
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 border border-slate-800">
             <span
               className={`w-2 h-2 rounded-full ${
-                lifecycle === 'PROCESSING'
-                  ? 'bg-emerald-500 animate-ping'
-                  : lifecycle === 'CALIBRATING'
-                  ? 'bg-amber-400 animate-pulse'
-                  : 'bg-slate-600'
+                authState === 'AUTHENTICATED'
+                  ? 'bg-emerald-400'
+                  : authState === 'AUTHENTICATION_FAILED'
+                  ? 'bg-rose-500'
+                  : 'bg-amber-400'
               }`}
             />
-            <span className="text-slate-300 capitalize">{lifecycle.toLowerCase().replace('_', ' ')}</span>
+            <span className="text-slate-300 capitalize text-[11px]">
+              {authState === 'AUTHENTICATED'
+                ? 'Presage Verified'
+                : authState === 'AUTHENTICATION_FAILED'
+                ? 'Auth Failed (401)'
+                : 'Lab Mode'}
+            </span>
           </div>
 
-          {telemetry?.isSimulated && (
-            <span className="text-[10px] text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-              Lab Simulator Mode
-            </span>
-          )}
-
-          <button
-            onClick={handleToggleAudio}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition cursor-pointer border ${
-              audioActive
-                ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300'
-                : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:text-white'
-            }`}
-          >
-            {audioActive ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
-            <span>Bio-Audio</span>
-          </button>
+          {/* Theme Selector */}
+          <div className="flex items-center gap-1 bg-slate-900/80 border border-slate-800 p-0.5 rounded-full">
+            {[
+              { id: 'midnight-flow', label: 'Midnight' },
+              { id: 'warm-focus', label: 'Warm' },
+              { id: 'daylight', label: 'Daylight' },
+            ].map((th) => (
+              <button
+                key={th.id}
+                onClick={() => setCurrentTheme(th.id)}
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition cursor-pointer ${
+                  currentTheme === th.id
+                    ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {th.label}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
-      {/* Main Studio Body */}
+      {/* MAIN LIVING OBSERVATORY STUDIO */}
       <main className="flex-1 p-6 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Physiological Cockpit & Real-time Flow Meter */}
+        {/* LEFT / CENTER: The Living Observatory Visual Core */}
         <div className="lg:col-span-8 flex flex-col gap-6">
-          {/* Active Flow Coherence Display */}
-          <div className="rounded-2xl border border-slate-800/80 bg-gradient-to-br from-slate-900/90 to-slate-950 p-6 shadow-xl relative overflow-hidden">
-            <div className="flex items-center justify-between mb-4">
+          {/* Living Centerpiece Orb & Rhythm Cockpit */}
+          <div className="rounded-3xl border border-slate-800/80 bg-gradient-to-br from-slate-900/90 to-slate-950 p-6 shadow-2xl relative overflow-hidden flex flex-col items-center justify-between min-h-[380px]">
+            {/* Ambient Background Radial Lighting */}
+            <div className="absolute inset-0 bg-radial-gradient from-teal-500/10 via-transparent to-transparent opacity-50 pointer-events-none" />
+
+            {/* Top Info Header */}
+            <div className="w-full flex items-center justify-between relative z-10">
               <div>
-                <p className="text-xs uppercase tracking-wider font-semibold text-slate-400">
-                  Autonomic Flow Coherence
+                <p className="text-xs uppercase font-mono tracking-widest text-slate-400">
+                  Focus Rhythm State
                 </p>
-                <h2 className="text-3xl font-extrabold text-white mt-1 flex items-center gap-2">
-                  {telemetry ? `${telemetry.flowCoherenceScore}%` : '--'}
-                  <span
-                    className={`text-xs font-mono font-medium px-2.5 py-0.5 rounded-full border ${
-                      telemetry?.autonomicState === 'DEEP_FLOW'
-                        ? 'bg-teal-500/10 text-teal-400 border-teal-500/30'
-                        : telemetry?.autonomicState === 'SYMPATHETIC_STRAIN'
-                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                        : 'bg-slate-800 text-slate-300 border-slate-700'
-                    }`}
-                  >
-                    {telemetry?.autonomicState?.replace('_', ' ') || 'Awaiting Session'}
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-sm font-bold text-white">
+                    {sessionObjective || 'Deep Concentration Sprint'}
                   </span>
-                </h2>
+                </div>
               </div>
 
-              {/* Focus Sprint Clock */}
+              {/* Authoritative Sprint Timer */}
               <div className="text-right">
-                <span className="text-xs text-slate-400 flex items-center gap-1 justify-end">
-                  <Clock className="h-3.5 w-3.5" /> Sprint Elapsed
+                <span className="text-xs text-slate-400 flex items-center gap-1 justify-end font-mono">
+                  <Clock className="h-3.5 w-3.5 text-teal-400" /> Sprint Clock
                 </span>
-                <span className="text-2xl font-mono font-bold text-white tracking-wider">
-                  {formatTime(sessionSeconds)}
+                <span className="text-3xl font-mono font-black text-white tracking-widest">
+                  {formatTime(sessionElapsedSec)}
                 </span>
               </div>
             </div>
 
-            {/* Elastic Coherence Progress Bar */}
-            <div className="w-full bg-slate-800/80 rounded-full h-3 overflow-hidden p-0.5">
-              <div
-                className="h-full rounded-full transition-all duration-500 bg-gradient-to-r from-teal-500 via-indigo-500 to-emerald-400 shadow-md shadow-teal-500/20"
-                style={{ width: `${telemetry?.flowCoherenceScore || 15}%` }}
+            {/* The Living Centerpiece Orb */}
+            <div className="relative z-10 my-1">
+              <LivingObservatoryOrb
+                rhythmState={telemetry?.rhythmState || 'AWAITING_SIGNAL'}
+                signalQuality={telemetry?.signalQuality || 'WARMING_UP'}
+                breathingWave={telemetry?.chestDisplacement ?? null}
+                pulseBpm={telemetry?.pulseRate ?? null}
+                flowCoherence={telemetry?.flowCoherenceScore ?? null}
+                isSimulated={telemetry?.isSimulated ?? isSimulatedMode}
               />
             </div>
 
-            {/* Screen Apnea / Eye Strain Alert Banners */}
-            {telemetry?.screenApneaDetected && (
-              <div className="mt-4 flex items-center gap-2 text-xs bg-rose-500/15 border border-rose-500/30 text-rose-300 px-3 py-2 rounded-xl animate-bounce">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>
-                  <strong>Screen Apnea Detected:</strong> Respiratory motion paused during deep focus. Take a gentle diaphragmatic inhale.
+            {/* Signal Integrity & Positioning Feedback */}
+            <div className="w-full flex items-center justify-between text-xs border-t border-slate-800/80 pt-3 relative z-10">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 font-mono">Signal Quality:</span>
+                <span
+                  className={`font-mono px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${
+                    telemetry?.signalQuality === 'EXCELLENT'
+                      ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                      : telemetry?.signalQuality === 'ADEQUATE'
+                      ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30'
+                      : telemetry?.signalQuality === 'WARMING_UP'
+                      ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                      : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                  }`}
+                >
+                  {telemetry?.signalQuality || 'INITIALIZING'}
                 </span>
               </div>
-            )}
-            {telemetry?.eyeStrainDetected && (
-              <div className="mt-2 flex items-center gap-2 text-xs bg-amber-500/15 border border-amber-500/30 text-amber-300 px-3 py-2 rounded-xl">
-                <Eye className="h-4 w-4 shrink-0" />
-                <span>
-                  <strong>Ocular Fixation Strain:</strong> Blink rate dropped below 4 bpm. Blink naturally to rehydrate eyes.
-                </span>
-              </div>
-            )}
+
+              {telemetry?.validationHint && (
+                <div className="text-[11px] text-slate-400 italic font-sans flex items-center gap-1">
+                  <span>Hint:</span> {telemetry.validationHint}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Real-time Plethysmograph and Respiratory Tidal Waveform */}
-          <WaveCanvas
+          {/* Genuine Living Waveform Canvas */}
+          <LivingWaveform
             ppgValue={telemetry?.ppgTrace ?? null}
             breathingValue={telemetry?.chestDisplacement ?? null}
-            pulseConfidence={telemetry?.pulseConfidence ?? 0.8}
+            pulseConfidence={telemetry?.pulseConfidence ?? 0}
+            breathingConfidence={telemetry?.breathingConfidence ?? 0}
+            signalQuality={telemetry?.signalQuality ?? 'WARMING_UP'}
+            isSimulated={telemetry?.isSimulated ?? isSimulatedMode}
           />
 
-          {/* Vitals KPI Grid */}
+          {/* Documented Vitals KPI Row */}
           <div className="grid grid-cols-3 gap-4">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2">
+            {/* Cardio Metric */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
+              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1.5">
                 <Heart className="h-4 w-4 text-rose-400" />
-                <span>Pulse Rate</span>
+                <span>Cardio Pulse</span>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold font-mono text-white">
-                  {telemetry?.pulseRate ?? '--'}
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-black font-mono text-white">
+                  {telemetry?.pulseRate !== null && telemetry?.pulseRate !== undefined
+                    ? telemetry.pulseRate
+                    : '--'}
                 </span>
                 <span className="text-xs text-slate-500 font-mono">BPM</span>
               </div>
               <span className="text-[10px] text-slate-400 mt-1 block">
                 Confidence: {Math.round((telemetry?.pulseConfidence ?? 0) * 100)}%
+                {telemetry?.hrvRmssd ? ` • HRV: ${telemetry.hrvRmssd}ms` : ''}
               </span>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2">
+            {/* Breathing Metric */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
+              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1.5">
                 <Wind className="h-4 w-4 text-teal-400" />
-                <span>Breathing Rate</span>
+                <span>Respiration</span>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold font-mono text-white">
-                  {telemetry?.breathingRate ?? '--'}
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-black font-mono text-white">
+                  {telemetry?.breathingRate !== null && telemetry?.breathingRate !== undefined
+                    ? telemetry.breathingRate
+                    : '--'}
                 </span>
                 <span className="text-xs text-slate-500 font-mono">RPM</span>
               </div>
               <span className="text-[10px] text-slate-400 mt-1 block">
-                Cadence: {telemetry?.breathingRate ? 'Smooth' : 'Calibrating'}
+                Confidence: {Math.round((telemetry?.breathingConfidence ?? 0) * 100)}%
               </span>
             </div>
 
-            <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-2">
+            {/* Face & Blinks Metric */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
+              <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold mb-1.5">
                 <Eye className="h-4 w-4 text-indigo-400" />
-                <span>Ocular Blink Rate</span>
+                <span>Blink Dynamics</span>
               </div>
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold font-mono text-white">
-                  {telemetry?.blinkRatePerMin ?? '--'}
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-black font-mono text-white">
+                  {telemetry?.totalBlinksDetected ?? 0}
                 </span>
-                <span className="text-xs text-slate-500 font-mono">/min</span>
+                <span className="text-xs text-slate-500 font-mono">blinks</span>
               </div>
               <span className="text-[10px] text-slate-400 mt-1 block">
-                Strain: {telemetry?.eyeStrainDetected ? 'High' : 'Normal'}
+                Rate: {telemetry?.blinkRatePerMin ?? 0} /min • Talking: {telemetry?.isTalking ? 'Yes' : 'No'}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Studio Controls & Telemetry Overview */}
+        {/* RIGHT COLUMN: Co-Pilot Controls & Adaptive Sound Studio */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          {/* Primary Action Card */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-6 flex flex-col justify-between">
+          {/* Session Co-Pilot Control Card */}
+          <div className="rounded-3xl border border-slate-800 bg-slate-900/85 p-6 shadow-xl flex flex-col justify-between">
             <div>
-              <h3 className="text-base font-bold text-white mb-1">Session Co-Pilot</h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-base font-bold text-white">Session Co-Pilot</h3>
+                <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
+                  {isFocusSessionActive ? 'In Progress' : 'Ready'}
+                </span>
+              </div>
               <p className="text-xs text-slate-400 mb-4">
-                Launch a contactless bio-adaptive deep work sprint.
+                Launch a contactless bio-adaptive focus sprint with local sensor processing.
               </p>
 
-              {/* Camera Selector */}
+              {/* Work Objective Input */}
               <div className="mb-4">
-                <label className="text-xs font-medium text-slate-300 block mb-1">
-                  Optical Sensing Device
+                <label className="text-[11px] font-mono uppercase text-slate-400 block mb-1">
+                  Focus Objective (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Write competitor analysis..."
+                  value={sessionObjective}
+                  onChange={(e) => setSessionObjective(e.target.value)}
+                  disabled={isFocusSessionActive}
+                  className="w-full rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-200 px-3 py-2 outline-none focus:border-teal-500"
+                />
+              </div>
+
+              {/* Target Duration Selector */}
+              <div className="mb-4">
+                <label className="text-[11px] font-mono uppercase text-slate-400 block mb-1">
+                  Sprint Duration
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[15, 25, 45].map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setTargetDurationMin(m)}
+                      disabled={isFocusSessionActive}
+                      className={`py-2 rounded-xl text-xs font-semibold font-mono border transition cursor-pointer ${
+                        targetDurationMin === m
+                          ? 'bg-teal-500/20 border-teal-500/50 text-teal-300'
+                          : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      {m} Min
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Camera Device Selector */}
+              <div className="mb-5">
+                <label className="text-[11px] font-mono uppercase text-slate-400 block mb-1">
+                  Camera Device
                 </label>
                 <select
                   value={selectedCamera}
                   onChange={(e) => setSelectedCamera(e.target.value)}
-                  className="w-full rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-200 px-3 py-2 outline-none focus:border-teal-500"
-                  disabled={lifecycle === 'PROCESSING'}
+                  disabled={isFocusSessionActive}
+                  className="w-full rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-slate-200 px-3 py-2 outline-none focus:border-teal-500 cursor-pointer"
                 >
                   {cameras.length > 0 ? (
                     cameras.map((c) => (
@@ -369,24 +508,25 @@ export const App: React.FC = () => {
                       </option>
                     ))
                   ) : (
-                    <option value="default">Integrated Hardware Camera</option>
+                    <option value="default">Primary Integrated Webcam</option>
                   )}
                 </select>
               </div>
             </div>
 
+            {/* Start/Stop Main Button */}
             <button
               onClick={handleToggleSensing}
-              className={`w-full py-3 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer ${
-                lifecycle === 'PROCESSING' || lifecycle === 'CALIBRATING'
-                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/20'
-                  : 'bg-teal-500 hover:bg-teal-400 text-slate-950 shadow-teal-500/20'
+              className={`w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-xl transition-all cursor-pointer ${
+                isFocusSessionActive
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/25'
+                  : 'bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-slate-950 shadow-teal-500/25'
               }`}
             >
-              {lifecycle === 'PROCESSING' || lifecycle === 'CALIBRATING' ? (
+              {isFocusSessionActive ? (
                 <>
                   <Square className="h-4 w-4 fill-current" />
-                  <span>Stop Sensing & Complete Sprint</span>
+                  <span>Stop Sensing & Log Sprint</span>
                 </>
               ) : (
                 <>
@@ -397,52 +537,71 @@ export const App: React.FC = () => {
             </button>
           </div>
 
-          {/* Privacy & SDK Integrity Badge */}
-          <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 text-xs text-slate-400 space-y-2">
-            <div className="flex items-center gap-2 text-slate-200 font-semibold">
-              <Shield className="h-4 w-4 text-emerald-400" />
-              <span>Camera Privacy Protocol</span>
-            </div>
-            <p className="text-[11px] leading-relaxed">
-              Video is evaluated purely in volatile memory via SmartSpectra C ABI bindings. No footage is ever saved, streamed, or dispatched to external servers.
-            </p>
-          </div>
+          {/* Dedicated Adaptive Sound Studio */}
+          <SoundStudioPanel
+            isPlaying={isAudioPlaying}
+            isAdaptive={isAudioAdaptive}
+            volume={audioVolume}
+            currentSoundscape={soundscapeMode}
+            pulseBpm={telemetry?.pulseRate ?? null}
+            breathingWave={telemetry?.chestDisplacement ?? null}
+            onTogglePlay={handleToggleAudio}
+            onToggleAdaptive={handleToggleAdaptive}
+            onVolumeChange={handleVolumeChange}
+            onSoundscapeChange={handleSoundscapeChange}
+          />
         </div>
       </main>
 
-      {/* Session Summary Modal */}
+      {/* SESSION COMPLETION & TELEMETRY LEDGER MODAL */}
       {showSummaryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-6">
-          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-teal-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-xl p-6 select-none animate-fadeIn">
+          <div className="w-full max-w-lg rounded-3xl border border-slate-700 bg-slate-900 p-8 shadow-2xl relative overflow-hidden">
+            <h3 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
+              <Sparkles className="h-6 w-6 text-teal-400" />
               <span>Sprint Telemetry Ledger</span>
             </h3>
-            <p className="text-xs text-slate-400 mb-4">
-              Your autonomic equilibrium breakdown for this session.
+            <p className="text-xs text-slate-400 mb-6">
+              Authoritative session duration and validated measurement records.
             </p>
 
             <div className="space-y-3 mb-6 font-mono text-xs">
-              <div className="flex justify-between p-2.5 rounded-lg bg-slate-800/60 border border-slate-700/50">
-                <span className="text-slate-400">Total Duration:</span>
-                <span className="text-white font-bold">{formatTime(sessionSeconds)}</span>
+              <div className="flex justify-between p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-slate-400">Authoritative Duration:</span>
+                <span className="text-white font-bold">{formatTime(sessionElapsedSec)}</span>
               </div>
-              <div className="flex justify-between p-2.5 rounded-lg bg-slate-800/60 border border-slate-700/50">
-                <span className="text-slate-400">Peak Flow Coherence:</span>
-                <span className="text-teal-400 font-bold">{sessionData.peakFlow}%</span>
+              <div className="flex justify-between p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-slate-400">Valid Optical Frames:</span>
+                <span className="text-emerald-400 font-bold">{sessionMetrics.validFrameCount}</span>
               </div>
-              <div className="flex justify-between p-2.5 rounded-lg bg-slate-800/60 border border-slate-700/50">
-                <span className="text-slate-400">Screen Apneas Interrupted:</span>
-                <span className="text-rose-400 font-bold">{sessionData.apneaCount}</span>
+              <div className="flex justify-between p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-slate-400">Peak Cognitive Rhythm:</span>
+                <span className="text-teal-400 font-bold">
+                  {sessionMetrics.peakFlow > 0 ? `${sessionMetrics.peakFlow}%` : 'N/A'}
+                </span>
+              </div>
+              <div className="flex justify-between p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-slate-400">Cumulative Blinks Detected:</span>
+                <span className="text-indigo-300 font-bold">{sessionMetrics.totalBlinks}</span>
+              </div>
+              <div className="flex justify-between p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+                <span className="text-slate-400">Data Integrity Notice:</span>
+                <span className="text-slate-300 font-bold">
+                  {sessionMetrics.validFrameCount === 0
+                    ? 'Zero Valid Optical Samples'
+                    : 'Validated Samples Recorded'}
+                </span>
               </div>
             </div>
 
-            <button
-              onClick={() => setShowSummaryModal(false)}
-              className="w-full py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-semibold text-xs cursor-pointer"
-            >
-              Close & Log to Local History
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowSummaryModal(false)}
+                className="w-full py-3 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs cursor-pointer shadow-lg shadow-teal-500/20"
+              >
+                Done & Return to Studio
+              </button>
+            </div>
           </div>
         </div>
       )}
