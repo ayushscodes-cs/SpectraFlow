@@ -36,6 +36,16 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
 
+  mainWindow.on('close', async () => {
+    if (smartSpectraService) {
+      await smartSpectraService.stop();
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
   smartSpectraService = new SmartSpectraService();
   smartSpectraService.setCallbacks(
     (payload: VitalsTelemetryPayload) => {

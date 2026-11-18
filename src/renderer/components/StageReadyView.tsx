@@ -18,6 +18,7 @@ import {
   Volume2,
 } from 'lucide-react';
 import { VitalsTelemetryPayload } from '../../types/telemetry';
+import { BioMirrorSynchrony } from './BioMirrorSynchrony';
 
 export interface StageActivity {
   id: string;
@@ -252,29 +253,27 @@ export const StageReadyView: React.FC<StageReadyViewProps> = ({
   return (
     <div className="space-y-6">
       {/* StageReady Cinematic Backstage Banner */}
-      <div className="relative overflow-hidden rounded-3xl border border-amber-500/20 bg-gradient-to-r from-amber-950/30 via-slate-900/80 to-slate-900/90 p-6 shadow-2xl backdrop-blur-xl">
-        <div className="absolute -top-12 -right-12 h-44 w-44 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
-        
+      <div className="relative overflow-hidden rounded-2xl border border-[#332d24] bg-[#141310] p-6 shadow-2xl">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/20 border border-amber-500/30 text-amber-300 mb-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/15 border border-amber-500/30 text-amber-400 mb-2">
               <Flame className="h-3.5 w-3.5" />
               <span>Backstage Preparation Studio</span>
             </div>
-            <h2 className="text-xl md:text-2xl font-extrabold text-white tracking-tight">
-              StageReady — Pre-Performance Presence
+            <h2 className="text-xl md:text-2xl font-black text-white tracking-tight font-mono">
+              StageReady // Pre-Performance Presence
             </h2>
             <p className="text-xs md:text-sm text-slate-400 mt-1 max-w-2xl leading-relaxed">
               Targeted bio-acoustic routines and breathwork protocols to center autonomic arousal before you step into high-stakes moments.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="px-4 py-2 rounded-xl bg-slate-950/60 border border-amber-500/20 text-right">
-              <span className="text-[10px] uppercase font-mono text-amber-400/80 block">Active Signal Sensor</span>
+          <div className="flex items-center gap-3 font-mono">
+            <div className="px-4 py-2 rounded-xl bg-[#0a0c10] border border-[#232936] text-right">
+              <span className="text-[10px] uppercase text-amber-400/80 block">Active Signal Sensor</span>
               <span className="text-xs font-bold text-white flex items-center justify-end gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                SmartSpectra Resilient Engine
+                <span className="h-2 w-2 rounded-full bg-lime-400 animate-pulse" />
+                Presage SmartSpectra v3.5
               </span>
             </div>
           </div>
@@ -303,32 +302,19 @@ export const StageReadyView: React.FC<StageReadyViewProps> = ({
               </button>
             </div>
 
-            {/* Guided Visual Pacer & Respiration Sync */}
-            <div className="my-8 flex flex-col items-center justify-center">
-              <div
-                className="relative flex items-center justify-center rounded-full transition-transform duration-300 ease-out"
-                style={{
-                  transform: `scale(${breathScale})`,
-                  width: '180px',
-                  height: '180px',
-                }}
-              >
-                {/* Harmonic Outer Glow */}
-                <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-amber-500/25 via-amber-400/10 to-teal-400/20 blur-xl animate-pulse" />
-                <div className="absolute inset-2 rounded-full border border-amber-400/40 bg-slate-950/80 shadow-2xl flex flex-col items-center justify-center p-4 text-center">
-                  <Wind className="h-7 w-7 text-amber-400 mb-1" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-200">
-                    {breathPhase === 'inhale' ? 'Inhale (4s)' : 'Exhale (6s)'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 mt-0.5">
-                    {telemetry?.breathingRate ? `${telemetry.breathingRate} RPM Detected` : 'Autonomous Pacer'}
-                  </span>
-                </div>
-              </div>
+            {/* Guided Visual Pacer & Respiration Sync: Integrated BioMirror Synchrony */}
+            <div className="my-6">
+              <BioMirrorSynchrony
+                detectedChestDisplacement={telemetry?.chestDisplacement ?? null}
+                detectedBreathingRate={telemetry?.breathingRate ?? null}
+                targetPacerPhase={breathPhase}
+                targetPacerScale={breathScale}
+                isSensingActive={isSensingActive}
+              />
 
               {/* Step Title & Instruction */}
-              <div className="mt-8 text-center max-w-md">
-                <h4 className="text-lg font-bold text-white tracking-tight">{currentStep.title}</h4>
+              <div className="mt-6 text-center max-w-lg mx-auto font-mono">
+                <h4 className="text-base font-bold text-white tracking-tight uppercase">{currentStep.title}</h4>
                 <p className="text-xs text-slate-300 mt-2 leading-relaxed">{currentStep.description}</p>
               </div>
             </div>

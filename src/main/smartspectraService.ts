@@ -298,9 +298,11 @@ export class SmartSpectraService {
     }
 
     if (this.sdkInstance) {
+      console.log('[SmartSpectra] Halting camera capture and destroying native SDK instance...');
       try {
         await this.sdkInstance.stopAsync();
         await this.sdkInstance.destroy();
+        console.log('[SmartSpectra] Hardware camera successfully released.');
       } catch (e) {
         console.warn('[SmartSpectra] Teardown warning:', e);
       }

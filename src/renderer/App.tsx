@@ -20,6 +20,7 @@ import { LivingWaveform } from './components/LivingWaveform';
 import { LivingObservatoryOrb } from './components/LivingObservatoryOrb';
 import { SoundStudioPanel } from './components/SoundStudioPanel';
 import { StageReadyView } from './components/StageReadyView';
+import { DevTelemetryInspector } from './components/DevTelemetryInspector';
 import { ConsentGate } from './components/ConsentGate';
 import { bioAudio } from './services/bioAudio';
 import {
@@ -289,13 +290,43 @@ export const App: React.FC = () => {
         </div>
 
         {/* Status Pills & Controls */}
-        <div className="flex items-center gap-4 text-xs font-mono">
+        <div className="flex items-center gap-3 text-xs font-mono">
+          {/* HARDWARE CAMERA KILL SWITCH */}
+          <button
+            onClick={async () => {
+              if (lifecycle === 'PROCESSING' || lifecycle === 'CALIBRATING') {
+                await window.spectraBridge.stopSensing();
+                setIsFocusSessionActive(false);
+              } else {
+                await window.spectraBridge.startSensing(selectedCamera);
+              }
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-bold transition cursor-pointer ${
+              lifecycle === 'PROCESSING' || lifecycle === 'CALIBRATING'
+                ? 'bg-rose-500/15 border-rose-500/40 text-rose-300 hover:bg-rose-500/25'
+                : 'bg-[#141721] border-[#232936] text-slate-400 hover:text-white'
+            }`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${
+                lifecycle === 'PROCESSING' || lifecycle === 'CALIBRATING'
+                  ? 'bg-rose-500 animate-pulse'
+                  : 'bg-slate-600'
+              }`}
+            />
+            <span>
+              {lifecycle === 'PROCESSING' || lifecycle === 'CALIBRATING'
+                ? 'CAMERA LIVE [KILL]'
+                : 'CAMERA OFF'}
+            </span>
+          </button>
+
           {/* Auth / SDK Status Badge */}
-          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 border border-slate-800">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#141721] border border-[#232936]">
             <span
               className={`w-2 h-2 rounded-full ${
                 authState === 'AUTHENTICATED'
-                  ? 'bg-emerald-400'
+                  ? 'bg-lime-400'
                   : authState === 'AUTHENTICATION_FAILED'
                   ? 'bg-rose-500'
                   : 'bg-amber-400'
@@ -311,18 +342,18 @@ export const App: React.FC = () => {
           </div>
 
           {/* Theme Selector */}
-          <div className="flex items-center gap-1 bg-slate-900/80 border border-slate-800 p-0.5 rounded-full">
+          <div className="flex items-center gap-1 bg-[#141721] border border-[#232936] p-0.5 rounded-lg">
             {[
-              { id: 'midnight-flow', label: 'Midnight' },
-              { id: 'warm-focus', label: 'Warm' },
-              { id: 'daylight', label: 'Daylight' },
+              { id: 'cyber-dark', label: 'Cyber' },
+              { id: 'hack-amber', label: 'Amber' },
+              { id: 'daylight', label: 'Day' },
             ].map((th) => (
               <button
                 key={th.id}
                 onClick={() => setCurrentTheme(th.id)}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium transition cursor-pointer ${
+                className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase transition cursor-pointer ${
                   currentTheme === th.id
-                    ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
+                    ? 'bg-lime-500/20 text-lime-400 border border-lime-500/40'
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -602,6 +633,16 @@ export const App: React.FC = () => {
             onToggleAdaptive={handleToggleAdaptive}
             onVolumeChange={handleVolumeChange}
             onSoundscapeChange={handleSoundscapeChange}
+          />
+        </div>
+
+        {/* BOTTOM FULL-WIDTH: LIVE SMARTSPECTRA TELEMETRY INSPECTOR */}
+        <div className="lg:col-span-12 mt-2">
+          <DevTelemetryInspector
+            telemetry={telemetry}
+            lifecycle={lifecycle}
+            authState={authState}
+            selectedCamera={selectedCamera}
           />
         </div>
       </main>
