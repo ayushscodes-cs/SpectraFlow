@@ -8,6 +8,7 @@ interface SoundStudioPanelProps {
   currentSoundscape: string;
   pulseBpm: number | null;
   breathingWave: number | null;
+  availableModes?: string[];
   onTogglePlay: () => void;
   onToggleAdaptive: () => void;
   onVolumeChange: (vol: number) => void;
@@ -21,6 +22,7 @@ export const SoundStudioPanel: React.FC<SoundStudioPanelProps> = ({
   currentSoundscape,
   pulseBpm,
   breathingWave,
+  availableModes = ['Deep Binaural Alpha', 'Warm Harmonic Tide', 'Stage Grounding 432Hz', 'Clarity & Presence 14Hz'],
   onTogglePlay,
   onToggleAdaptive,
   onVolumeChange,
@@ -52,7 +54,7 @@ export const SoundStudioPanel: React.FC<SoundStudioPanelProps> = ({
           Soundscape Mode
         </label>
         <div className="grid grid-cols-2 gap-2 text-xs">
-          {['Deep Binaural Alpha', 'Warm Harmonic Tide'].map((mode) => (
+          {availableModes.map((mode) => (
             <button
               key={mode}
               onClick={() => onSoundscapeChange(mode)}

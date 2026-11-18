@@ -19,6 +19,7 @@ import {
 import { LivingWaveform } from './components/LivingWaveform';
 import { LivingObservatoryOrb } from './components/LivingObservatoryOrb';
 import { SoundStudioPanel } from './components/SoundStudioPanel';
+import { StageReadyView } from './components/StageReadyView';
 import { ConsentGate } from './components/ConsentGate';
 import { bioAudio } from './services/bioAudio';
 import {
@@ -33,6 +34,9 @@ export const App: React.FC = () => {
   const [currentTheme, setCurrentTheme] = useState<string>(() => {
     return localStorage.getItem('spectra_theme') || 'midnight-flow';
   });
+
+  // Mode Switcher: 'FLOW' | 'STAGEREADY'
+  const [activeAppMode, setActiveAppMode] = useState<'FLOW' | 'STAGEREADY'>('FLOW');
 
   const [consentGranted, setConsentGranted] = useState<boolean>(false);
   const [cameras, setCameras] = useState<CameraDeviceInfo[]>([]);
@@ -246,8 +250,42 @@ export const App: React.FC = () => {
                 Studio
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 font-medium">Bio-Adaptive Deep Work</p>
+            <p className="text-[11px] text-slate-400 font-medium">
+              {activeAppMode === 'FLOW' ? 'Bio-Adaptive Deep Work' : 'Pre-Stage Presence'}
+            </p>
           </div>
+        </div>
+
+        {/* PRIMARY MODE SWITCHER: FLOW vs STAGEREADY */}
+        <div className="flex items-center p-1 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-inner">
+          <button
+            onClick={() => {
+              setActiveAppMode('FLOW');
+              handleSoundscapeChange('Deep Binaural Alpha');
+            }}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeAppMode === 'FLOW'
+                ? 'bg-gradient-to-r from-teal-500 to-indigo-600 text-white shadow-md shadow-teal-500/20'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Activity className="h-3.5 w-3.5" />
+            <span>FLOW</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveAppMode('STAGEREADY');
+              handleSoundscapeChange('Stage Grounding 432Hz');
+            }}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeAppMode === 'STAGEREADY'
+                ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-md shadow-amber-500/25'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            <span>STAGEREADY</span>
+          </button>
         </div>
 
         {/* Status Pills & Controls */}
@@ -295,8 +333,23 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      {/* MAIN LIVING OBSERVATORY STUDIO */}
-      <main className="flex-1 p-6 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* MAIN VIEW: FLOW vs STAGEREADY */}
+      {activeAppMode === 'STAGEREADY' ? (
+        <main className="flex-1 p-6 max-w-7xl mx-auto w-full">
+          <StageReadyView
+            telemetry={telemetry}
+            onSelectSoundscape={handleSoundscapeChange}
+            onStartSensing={() => {
+              if (lifecycle !== 'PROCESSING' && lifecycle !== 'CALIBRATING') {
+                window.spectraBridge.startSensing(selectedCamera);
+              }
+            }}
+            isSensingActive={lifecycle === 'PROCESSING' || lifecycle === 'CALIBRATING'}
+          />
+        </main>
+      ) : (
+        /* FLOW MODE: LIVING OBSERVATORY STUDIO */
+        <main className="flex-1 p-6 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* LEFT / CENTER: The Living Observatory Visual Core */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           {/* Living Centerpiece Orb & Rhythm Cockpit */}
@@ -552,6 +605,7 @@ export const App: React.FC = () => {
           />
         </div>
       </main>
+      )}
 
       {/* SESSION COMPLETION & TELEMETRY LEDGER MODAL */}
       {showSummaryModal && (

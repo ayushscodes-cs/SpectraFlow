@@ -35,6 +35,22 @@ export const SOUNDSCAPE_PRESETS: Record<string, SoundscapePresetConfig> = {
     filterQ: 1.5,
     type: 'triangle',
   },
+  'Stage Grounding 432Hz': {
+    name: 'Stage Grounding 432Hz',
+    baseFreq: 108.0, // Sub-octave of 432Hz (grounding warmth)
+    offsetFreq: 7.83, // Schumann resonance offset (centering)
+    filterCutoff: 480,
+    filterQ: 1.8,
+    type: 'sine',
+  },
+  'Clarity & Presence 14Hz': {
+    name: 'Clarity & Presence 14Hz',
+    baseFreq: 144.0, // Resonant clarity carrier
+    offsetFreq: 14.0, // Low Beta alert cognitive rhythm
+    filterCutoff: 600,
+    filterQ: 1.4,
+    type: 'triangle',
+  },
 };
 
 export class BioAudioEngine {
