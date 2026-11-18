@@ -160,8 +160,13 @@ export class SmartSpectraService {
             if (this.authState !== 'AUTHENTICATED') {
               this.setAuthState('AUTHENTICATED');
             }
+          } else if (strStatus === '4') {
+            // kCompleted / idle
+            console.log('[SmartSpectra] Status 4: Session frame sequence completed.');
           } else if (strStatus === '5') {
-            this.setLifecycle('STOPPED');
+            // kError: Log diagnostic details without tearing down UI prematurely
+            console.warn('[SmartSpectra] Status 5: Internal engine reported error/pause.');
+            // Do not force STOPPED immediately if metrics were streaming or calibrating
           }
         });
 
@@ -217,7 +222,7 @@ export class SmartSpectraService {
           const errorCode = typeof err === 'number' ? err : err?.code;
           
           if (errorCode === 2 || String(err).includes('AuthenticationFailed') || String(err).includes('401')) {
-            this.setAuthState('AUTHENTICATION_FAILED', 'API key authorization failed with Presage server (HTTP 401). Please verify key at physiology.presagetech.com.');
+            this.setAuthState('AUTHENTICATION_FAILED', 'API key authorization failed with Presage server (HTTP 401). System clock skew or licensing error detected.');
           } else {
             this.setAuthState('ERROR', typeof err === 'object' ? err?.message : String(err));
           }
@@ -225,7 +230,10 @@ export class SmartSpectraService {
           if (this.errorCallback) {
             this.errorCallback(typeof err === 'object' ? err?.message || JSON.stringify(err) : String(err));
           }
-          this.setLifecycle('ERROR');
+          // Do not instantly terminate the lifecycle on transient curl network timeouts
+          if (errorCode === 2 || errorCode === 3) {
+            this.setLifecycle('ERROR');
+          }
         });
 
         this.setLifecycle('CALIBRATING');
