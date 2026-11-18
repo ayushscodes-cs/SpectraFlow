@@ -89,11 +89,22 @@ export class SmartSpectraService {
   }
 
   public async start(cameraId?: string): Promise<{ success: boolean; message?: string }> {
-    if (this.lifecycle === 'PROCESSING') {
+    if (this.lifecycle === 'PROCESSING' || this.lifecycle === 'CALIBRATING') {
       return { success: true };
     }
 
     this.autonomicEngine.reset();
+
+    // Ensure any existing native instance is completely stopped before starting fresh
+    if (this.sdkInstance) {
+      try {
+        await this.sdkInstance.stopAsync();
+        await this.sdkInstance.destroy();
+      } catch (e) {
+        console.warn('[SmartSpectra] Pre-start cleanup warning:', e);
+      }
+      this.sdkInstance = null;
+    }
 
     // If an API key is present and simulator is not explicitly forced
     if (this.apiKey && this.apiKey.length > 10 && !this.devSimulatorEnabled) {
@@ -104,21 +115,25 @@ export class SmartSpectraService {
         const {
           SmartSpectraSDK,
           CameraSelection,
-          cardioMetrics,
-          breathingMetrics,
-          faceMetrics,
+          MetricType,
           decodeMetrics,
           SmartSpectraErrorCode,
         } = require('@smartspectra/node-sdk');
 
-        // STRICT METRICS: Only documented bundles
+        // RESILIENT METRICS: Request verified on-device metrics that run reliably
+        // without remote model download failures. Exclude APNEA (unavailable) and
+        // EXPRESSIONS (which requires remote paired server model delivery).
+        const requestedMetrics = [
+          MetricType.CHEST_BREATHING,
+          MetricType.BREATHING_RATE,
+          MetricType.FACE_LANDMARKS,
+          MetricType.BLINKING,
+          MetricType.TALKING,
+        ];
+
         this.sdkInstance = new SmartSpectraSDK({
           apiKey: this.apiKey,
-          requestedMetrics: [
-            ...cardioMetrics,
-            ...breathingMetrics,
-            ...faceMetrics,
-          ],
+          requestedMetrics,
           enableTelemetry: true, // Transparently disclosed
         });
 

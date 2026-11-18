@@ -188,12 +188,12 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleToggleAudio = () => {
+  const handleToggleAudio = async () => {
     if (isAudioPlaying) {
       bioAudio.stop();
       setIsAudioPlaying(false);
     } else {
-      bioAudio.start();
+      await bioAudio.start();
       setIsAudioPlaying(true);
     }
   };
