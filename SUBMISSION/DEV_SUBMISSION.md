@@ -1,77 +1,101 @@
-# SpectraFlow — Bio-Adaptive Deep Work Studio Powered by Presage SmartSpectra
+---
+title: "SpectraFlow: A Bio-Adaptive Studio and Interoceptive Polygraph Powered by Presage SmartSpectra"
+published: true
+tags: presagechallenge, devchallenge, electron, typescript, webdev
+cover_image: https://raw.githubusercontent.com/ayushscodes-cs/SpectraFlow/master/docs/screenshots/01_flow_studio_live_waveform.jpg
+description: "A contactless bio-adaptive desktop environment that uses your webcam to translate real-time respiration, blink dynamics, and pulse into generative focus audio, pre-stage grounding rituals, and an interactive lie-detector."
+---
 
-*This article is submitted for the Presage SmartSpectra SDK Challenge on DEV Community (#devchallenge, #presagechallenge).*
+## What I Built
+
+Most timer and productivity apps treat you like an uninterrupted machine. They set arbitrary 25-minute clocks, play looped Spotify playlists that don't know whether your nervous system is calm or redlining, and ignore what happens to our bodies during high-intensity cognitive work:
+
+1. **Screen Apnea:** The subconscious habit of freezing our breath when debugging difficult errors or reading dense prose.
+2. **Ocular Fixation Strain:** Suppressing natural blink rates down to 2–3 blinks per minute, causing dry eye and fatigue.
+3. **Disconnection from Autonomic Arousal:** Walking into stressful presentations, job interviews, or viva defenses while our sympathetic nervous system is secretly running wild.
+
+To tackle this, I built **SpectraFlow**: a contactless bio-adaptive deep work studio and interoceptive companion powered by the **Presage SmartSpectra SDK (v3.5.0)**, **Electron**, **React**, and the **Web Audio API**.
+
+Instead of acting like a passive health dashboard with static numbers, SpectraFlow translates physical human signals into immediate acoustic and kinetic feedback across two distinct modes:
+
+- **FLOW MODE:** Deep-work sprints where a real-time Web Audio synthesizer couples its harmonic low-pass filter (400Hz–700Hz) to your physical respiratory wave (`upperTrace`). When your breathing expands, the ambient harmonics open; when you relax into an exhale, the soundscape warms.
+- **STAGEREADY MODE:** A backstage preparation studio designed for keynotes, interviews, and academic vivas. It features an interactive **Bio-Mirror Synchrony Oscilloscope** that plots your webcam-detected chest displacement against a kinetic breathing pacer (4s in, 6s out).
+- **POLYGRAPH PROTOCOL (Interoceptive Truth Game):** An interactive module that scans your micro-signals (blink cadence spikes and respiratory pauses) over 6-second interrogation prompts to evaluate biometric composure and detect deception.
 
 ---
 
-## 1. What I Built
+## Screenshots & Interface Tour
 
-Modern deep work is an endurance sport. When developers, researchers, and knowledge workers enter intense problem-solving sessions, our bodies reflect that cognitive load in subtle, often detrimental ways:
-- We experience **"screen apnea"**—subconsciously arresting or holding our breath for seconds at a time while reading cryptic stack traces or tricky logic.
-- We suppress our natural blink rate down to dangerous levels, leading to severe ocular strain and headache.
-- We suffer through fixed timers (like Pomodoro clocks) that rudely interrupt us while we are in effortless flow, yet fail to intervene when our sympathetic nervous system is red-lining with stress.
+### 1. Flow Studio: Live Optical Respiratory Displacement & Adaptive Entrainment
+![Flow Studio](https://raw.githubusercontent.com/ayushscodes-cs/SpectraFlow/master/docs/screenshots/01_flow_studio_live_waveform.jpg)
+*Real-time optical chest displacement wave (`upperTrace`) captured by Presage SmartSpectra at 30 FPS, driving the resonant frequency of the binaural focus soundscape.*
 
-To solve this, I built **SpectraFlow**: an autonomous desktop cognitive flow companion and autonomic co-pilot built with Electron, React, TypeScript, and the **Presage SmartSpectra SDK (v3.5.0)**.
+### 2. StageReady: Pre-Performance Presence & Guided Cadence
+![StageReady Routine](https://raw.githubusercontent.com/ayushscodes-cs/SpectraFlow/master/docs/screenshots/02_stageready_guided_routine.jpg)
+*Targeted routines for Keynotes, Interviews, and Vivas with diaphragmatic centering and vocal pacing.*
 
-Instead of being a passive mirror that just displays vital signs, SpectraFlow **actively orchestrates your focus environment** based on live human physiological signals:
-1. **Bio-Adaptive Audio Entrainment:** A real-time Web Audio generative synthesizer whose binaural frequencies and low-pass filter cutoff breathe and pulse in harmony with your live respiratory wave and heart rate.
-2. **Screen Apnea Interruption:** Detects the moment your respiratory motion freezes during deep concentration and delivers a gentle, peripheral visual reminder to breathe.
-3. **Autonomic Flow Coherence Meter:** Synthesizes cardiovascular stability, respiratory cadence, and blink regularity into a continuous, real-time Flow Coherence percentage (0–100%).
-4. **Post-Sprint Telemetry Ledger:** Provides an objective summary of your physiological stamina, flow peaks, and apnea episodes—stored 100% locally.
+### 3. Bio-Mirror Oscilloscope
+![Bio-Mirror](https://raw.githubusercontent.com/ayushscodes-cs/SpectraFlow/master/docs/screenshots/03_biomirror_respiratory_oscilloscope.jpg)
+*Direct 60 FPS canvas oscilloscope tracking physical chest rise and fall against the target pacing rhythm.*
 
----
-
-## 2. Demo
-
-- **Video Walkthrough (YouTube / Loom):** [Link to Demonstration Video]
-- **Repository:** [https://github.com/Ayush/SpectraFlow](https://github.com/Ayush/SpectraFlow)
+### 4. Sprint Telemetry Ledger
+![Telemetry Ledger](https://raw.githubusercontent.com/ayushscodes-cs/SpectraFlow/master/docs/screenshots/04_telemetry_ledger_summary.jpg)
+*Session summary showing validated optical frames, authoritative duration, and total blinks detected without cloud storage.*
 
 ---
 
-## 3. How It Responds to Human Signals
+## Demo & Repository
 
-SpectraFlow does not rely on a single metric; it uses a multi-modal fusion of signals powered by the Presage SmartSpectra SDK:
+- **GitHub Repository:** [https://github.com/ayushscodes-cs/SpectraFlow](https://github.com/ayushscodes-cs/SpectraFlow)
+- **Demo Video Walkthrough:** [Insert your 60-90s Loom / YouTube link here]
 
-| Signal | SDK Module | Application Response |
+---
+
+## How It Responds to Human Signals
+
+SpectraFlow connects to the Presage SmartSpectra native C++ runtime (via DirectShow camera capture on Windows) and decodes live Protobuf frames into actionable application reactions:
+
+| Signal Captured | SDK Source | Application Response |
 | :--- | :--- | :--- |
-| **Cardio Pulse Rate & PPG** | `cardioMetrics` | Drives sympathetic vs. parasympathetic balance tracking and modulates the base tempo of the focus soundscape. |
-| **Respiratory Tidal Wave** | `breathingMetrics` | Live dual-canvas rendering of respiratory motion. Detects screen apnea if chest displacement arrests for > 7s. |
-| **Facial Landmarks & Blinks** | `faceMetrics` | Tracks blink cadence in real-time. Flags ocular fixation fatigue if blink frequency drops below 4 bpm. |
-| **Autonomic Coherence** | Computed Engine | Dynamic composite score (0-100%) that determines when you are in "Deep Flow", "Sympathetic Strain", or "Fatigue Drift". |
+| **Respiratory Waveform** | `metrics.breathing.upperTrace` | Plotted directly on a 60 FPS HTML canvas oscilloscope; modulates Web Audio low-pass biquad filter in real time. |
+| **Blink Cadence & Fixation** | `metrics.face.blinking` | Discrete edge detection tracks cumulative blink count and rolling rate per minute; alerts during fixation freeze. |
+| **Speaking & Facial Landmarks** | `metrics.face.talking`, `faceMetrics` | Powers vocal drills in StageReady and verifies answer delivery during the Polygraph protocol. |
+| **Cardio Pulse Estimation** | `metrics.cardio.pulseRate` / rPPG | Synchronizes cognitive rhythm score and tracks resting cardiovascular composure across focus sprints. |
 
 ---
 
-## 4. Prize Categories
+## Prize Categories Targeted
 
 ### 🥇 Best Overall Human-Sensing Experience
-SpectraFlow is a complete, production-grade Electron desktop application that demonstrates what is possible when camera-based physiological sensing is tightly woven into everyday knowledge work. It leverages the full depth of SmartSpectra—cardiac plethysmography, respiratory displacement, and ocular facial dynamics—into a cohesive, zero-lag user experience.
+SpectraFlow doesn't just display a chart—it creates an organic closed loop between the human body and the computer environment. Your natural breath actively sculpts the focus soundscape, and your ocular dynamics dictate your session health.
 
 ### 💡 Best Thoughtful Real-World Use
-Screen apnea and sedentary cognitive burnout affect millions of developers and remote workers every day. SpectraFlow provides a non-invasive, local-first solution that safeguards cognitive health and productivity without needing wearables or smartwatches.
+Built to address real developer burnout and pre-performance anxiety without requiring invasive wearables or smartwatches. Zero clinical claims are made: all metrics are framed transparently as supportive ergonomics and focus bio-feedback.
 
 ### 🎨 Most Creative or Delightful Use
-The built-in Bio-Adaptive Generative Soundscape transforms raw physiological waveforms into warm ambient music that breathes with you. When your breath slows down, the audio environment subtly warms and opens up, creating an organic sensory feedback loop between human biology and software.
+The built-in **Bio-Mirror Oscilloscope** and **Polygraph Protocol** turn contactless physiological sensing into an engaging, interoceptive experience that anyone can test in 10 seconds with a standard laptop webcam.
 
 ---
 
-## 5. Consent and Data Handling
+## Privacy & Consensual Sensing
 
-Privacy and consensual sensing are first-class engineering constraints in SpectraFlow:
-- **Affirmative Consent Gate:** Camera sensors are completely disabled until the user explicitly reviews the data policies and clicks "Grant Consent".
-- **100% Local Optical Processing:** Native Presage SmartSpectra C ABI bindings (via `koffi` FFI) analyze camera frames directly in local volatile memory.
-- **Zero Video Storage or Transmission:** No video frames, pictures, or facial biometrics are ever written to disk or sent to any remote server or AI service.
-- **Instant Hardware Kill Switch:** An omnipresent control allows the user to immediately terminate camera sensing and release the hardware.
-- **Honest Labelling:** When running in development or testing mode without an active API key, simulated data is prominently and transparently labelled as such.
+Privacy is treated as a fundamental architectural requirement:
+
+1. **Affirmative Consent Gate:** Camera sensors remain offline until the user explicitly reviews the privacy disclosures and clicks "Grant Consent".
+2. **100% Local Optical Processing:** Video frames are analyzed entirely in volatile local memory by the native Presage C ABI engine. Zero raw images or video recordings are written to disk or sent to the cloud.
+3. **Hardware Kill-Switch:** An omnipresent button in the header bar allows the user to instantly release the webcam hardware (`stopAsync()` and `destroy()`) at any second.
+4. **Transparent Telemetry Disclosures:** Aggregate SDK licensing telemetry sent over TLS to Presage servers is disclosed openly in the consent gate.
 
 ---
 
-## 6. Code & Architecture
+## Tech Stack
 
-SpectraFlow is built with:
-- **Electron 34 + React 18 + TypeScript + Vite + Tailwind CSS**
-- **Presage SmartSpectra Node SDK (`@smartspectra/node-sdk` v3.5)** with native Windows x64 runtime
-- **Web Audio API** for real-time generative bio-adaptation
-- **Vitest** for automated unit and calculation testing
+- **Framework:** Electron 34 + React 18 + TypeScript + Vite
+- **Styling:** Tailwind CSS (Developer-focused theme inspired by Hacktoberfest & Linear)
+- **Physiological Sensing:** Presage SmartSpectra Node SDK (`@smartspectra/node-sdk` v3.5.0)
+- **Audio Architecture:** Web Audio API (Persistent binaural synthesis graph with zero dropout)
+- **Testing:** Vitest automated test suite
 
-Check out the full open-source codebase on GitHub:
-👉 [https://github.com/Ayush/SpectraFlow](https://github.com/Ayush/SpectraFlow)
+---
+
+*Built with passion for the Presage SmartSpectra SDK Challenge.*
