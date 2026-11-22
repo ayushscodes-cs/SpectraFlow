@@ -1,5 +1,5 @@
 ---
-title: "SpectraFlow: A Bio-Adaptive Studio and Interoceptive Polygraph Powered by Presage SmartSpectra"
+title: "SpectraFlow: Bio-Adaptive Focus Studio & Polygraph with Presage SmartSpectra"
 published: true
 tags: presagechallenge, devchallenge, electron, typescript, webdev
 cover_image: https://raw.githubusercontent.com/ayushscodes-cs/SpectraFlow/master/docs/screenshots/01_flow_studio_live_waveform.jpg
