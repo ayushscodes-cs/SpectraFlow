@@ -47,7 +47,7 @@ Instead of acting like a passive health dashboard with static numbers, SpectraFl
 ## Demo & Repository
 
 - **GitHub Repository:** [https://github.com/ayushscodes-cs/SpectraFlow](https://github.com/ayushscodes-cs/SpectraFlow)
-- **Demo Video Walkthrough:** [Insert your 60-90s Loom / YouTube link here]
+- **Direct Video Recording:** [View SpectraFlow Demo Recording (MP4)](https://github.com/ayushscodes-cs/SpectraFlow/raw/master/docs/SpectraFlow_Demo_Recording.mp4)
 
 ---
 
