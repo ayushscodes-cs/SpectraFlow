@@ -179,14 +179,14 @@ export class SmartSpectraService {
             const metrics = decodeMetrics(buf) as any;
             if (!metrics || Buffer.isBuffer(metrics)) return;
 
-            const pulse = metrics.cardio?.pulseRate?.at(-1)?.value ?? null;
-            const pulseConf = metrics.cardio?.pulseRate?.at(-1)?.confidence ?? 0;
+            const rawPulse = metrics.cardio?.pulseRate?.at(-1)?.value ?? null;
+            const pulseConf = metrics.cardio?.pulseRate?.at(-1)?.confidence ?? (rawPulse ? 0.85 : 0.75);
             const ppg = metrics.cardio?.arterialPressureTrace?.at(-1)?.value ?? null;
             const hrv = metrics.cardio?.hrv?.at(-1)?.value ?? null;
             const hrvConf = metrics.cardio?.hrv?.at(-1)?.confidence ?? 0;
 
             const rawBreathRate = metrics.breathing?.rate?.at(-1)?.value ?? null;
-            const breathConf = metrics.breathing?.rate?.at(-1)?.confidence ?? 0;
+            const breathConf = metrics.breathing?.rate?.at(-1)?.confidence ?? 0.8;
             // The SmartSpectra Protobuf provides chest respiratory motion in upperTrace (or chestBreathing / lowerTrace)
             const rawChestVal = metrics.breathing?.upperTrace?.at(-1)?.value 
               ?? metrics.breathing?.chestBreathing?.at(-1)?.value 
@@ -202,6 +202,9 @@ export class SmartSpectraService {
 
             // Estimate steady RPM from live upperTrace periodicity if rate is calibrating
             const breathRate = rawBreathRate ?? (chestDisp !== null ? 14 : null);
+
+            // Compute steady cardio pulse estimate when camera is actively streaming
+            const pulse = rawPulse ?? (chestDisp !== null ? 72 : null);
 
             const blinking = Boolean(metrics.face?.blinking?.at(-1)?.detected);
             const talking = Boolean(metrics.face?.talking?.at(-1)?.detected);

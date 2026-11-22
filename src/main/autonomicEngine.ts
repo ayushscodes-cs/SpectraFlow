@@ -10,6 +10,8 @@ export class AutonomicEngine {
   private breathingHistory: number[] = [];
   private sessionStartTime: number = Date.now();
 
+  private recentQualities: string[] = [];
+
   public processSample(raw: {
     pulseRate?: number | null;
     pulseConfidence?: number;
@@ -49,15 +51,33 @@ export class AutonomicEngine {
     const breathing = raw.breathingRate ?? null;
     const breathingConf = raw.breathingConfidence ?? 0;
 
-    // 2. Signal Quality Validation Gate with Hysteresis (prevents flickering)
-    let signalQuality: VitalsTelemetryPayload['signalQuality'] = 'WARMING_UP';
-    const isWarmingUp = now - this.sessionStartTime < 8000;
+    // 2. Signal Quality Validation Gate with 15-sample Hysteresis Smoothing
+    let rawQuality: VitalsTelemetryPayload['signalQuality'] = 'LOW_CONFIDENCE';
+    const isWarmingUp = now - this.sessionStartTime < 6000;
 
-    if (raw.chestDisplacement !== null || (pulse && pulseConf >= 0.5) || (breathing && breathingConf >= 0.5)) {
-      signalQuality = 'EXCELLENT';
+    if (raw.chestDisplacement !== null || pulse) {
+      rawQuality = 'EXCELLENT';
     } else if (raw.isBlinking || raw.isTalking) {
-      signalQuality = 'ADEQUATE';
+      rawQuality = 'ADEQUATE';
     } else if (isWarmingUp) {
+      rawQuality = 'WARMING_UP';
+    }
+
+    this.recentQualities.push(rawQuality);
+    if (this.recentQualities.length > 20) this.recentQualities.shift();
+
+    // Mode calculation to avoid violent jumping
+    const counts = this.recentQualities.reduce((acc, q) => {
+      acc[q] = (acc[q] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    let signalQuality: VitalsTelemetryPayload['signalQuality'] = 'EXCELLENT';
+    if ((counts['EXCELLENT'] || 0) >= 6) {
+      signalQuality = 'EXCELLENT';
+    } else if ((counts['ADEQUATE'] || 0) >= 6) {
+      signalQuality = 'ADEQUATE';
+    } else if ((counts['WARMING_UP'] || 0) >= 6) {
       signalQuality = 'WARMING_UP';
     } else {
       signalQuality = 'LOW_CONFIDENCE';

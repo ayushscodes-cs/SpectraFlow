@@ -20,6 +20,7 @@ import { LivingWaveform } from './components/LivingWaveform';
 import { LivingObservatoryOrb } from './components/LivingObservatoryOrb';
 import { SoundStudioPanel } from './components/SoundStudioPanel';
 import { StageReadyView } from './components/StageReadyView';
+import { TruthLiePolygraph } from './components/TruthLiePolygraph';
 import { DevTelemetryInspector } from './components/DevTelemetryInspector';
 import { ConsentGate } from './components/ConsentGate';
 import { bioAudio } from './services/bioAudio';
@@ -633,6 +634,17 @@ export const App: React.FC = () => {
             onToggleAdaptive={handleToggleAdaptive}
             onVolumeChange={handleVolumeChange}
             onSoundscapeChange={handleSoundscapeChange}
+          />
+        </div>
+
+        {/* TRUTH OR LIE BIOMETRIC EXPERIMENT SECTION */}
+        <div className="lg:col-span-12 mt-4">
+          <TruthLiePolygraph
+            telemetry={telemetry}
+            isSensingActive={lifecycle === 'PROCESSING' || lifecycle === 'CALIBRATING'}
+            onStartSensing={() => {
+              window.spectraBridge.startSensing(selectedCamera);
+            }}
           />
         </div>
 
