@@ -187,7 +187,12 @@ export class SmartSpectraService {
 
             const breathRate = metrics.breathing?.rate?.at(-1)?.value ?? null;
             const breathConf = metrics.breathing?.rate?.at(-1)?.confidence ?? 0;
-            const chestDisp = metrics.breathing?.chestBreathing?.at(-1)?.value ?? null;
+            // The SmartSpectra Protobuf provides chest respiratory motion in upperTrace (or chestBreathing / lowerTrace)
+            const rawChestVal = metrics.breathing?.upperTrace?.at(-1)?.value 
+              ?? metrics.breathing?.chestBreathing?.at(-1)?.value 
+              ?? metrics.breathing?.lowerTrace?.at(-1)?.value 
+              ?? null;
+            const chestDisp = rawChestVal !== null ? Number(rawChestVal) : null;
 
             const blinking = Boolean(metrics.face?.blinking?.at(-1)?.detected);
             const talking = Boolean(metrics.face?.talking?.at(-1)?.detected);
