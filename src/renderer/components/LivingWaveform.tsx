@@ -32,8 +32,8 @@ export const LivingWaveform: React.FC<LivingWaveformProps> = ({
     const width = canvas.width;
     const height = canvas.height;
 
-    const hasRealPPG = ppgValue !== null && pulseConfidence > 0;
-    const hasRealBreath = breathingValue !== null && breathingConfidence > 0;
+    const hasRealPPG = ppgValue !== null;
+    const hasRealBreath = breathingValue !== null && breathingValue !== undefined;
 
     // Buffer samples
     if (hasRealPPG || isSimulated) {
@@ -124,7 +124,7 @@ export const LivingWaveform: React.FC<LivingWaveformProps> = ({
     }
 
     // Honest Waiting Banner Overlay
-    if (isAwaitingOrWarmup && !isSimulated) {
+    if (isAwaitingOrWarmup && !hasRealBreath && !hasRealPPG && !isSimulated) {
       ctx.fillStyle = 'rgba(10, 15, 25, 0.7)';
       ctx.fillRect(width / 2 - 160, height / 2 - 20, 320, 40);
       ctx.strokeStyle = 'rgba(245, 158, 11, 0.4)';

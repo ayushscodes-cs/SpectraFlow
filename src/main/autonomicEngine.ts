@@ -53,9 +53,9 @@ export class AutonomicEngine {
     let signalQuality: VitalsTelemetryPayload['signalQuality'] = 'WARMING_UP';
     const isWarmingUp = now - this.sessionStartTime < 15000;
 
-    if (pulseConf >= 0.7 && (breathingConf >= 0.7 || breathing === null)) {
+    if (pulseConf >= 0.6 || (breathingConf >= 0.6) || (raw.chestDisplacement !== null && raw.chestDisplacement !== undefined)) {
       signalQuality = 'EXCELLENT';
-    } else if (pulseConf >= 0.4 || breathingConf >= 0.4) {
+    } else if (pulseConf >= 0.3 || breathingConf >= 0.3 || raw.isBlinking) {
       signalQuality = 'ADEQUATE';
     } else if (isWarmingUp) {
       signalQuality = 'WARMING_UP';
