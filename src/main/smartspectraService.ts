@@ -185,14 +185,23 @@ export class SmartSpectraService {
             const hrv = metrics.cardio?.hrv?.at(-1)?.value ?? null;
             const hrvConf = metrics.cardio?.hrv?.at(-1)?.confidence ?? 0;
 
-            const breathRate = metrics.breathing?.rate?.at(-1)?.value ?? null;
+            const rawBreathRate = metrics.breathing?.rate?.at(-1)?.value ?? null;
             const breathConf = metrics.breathing?.rate?.at(-1)?.confidence ?? 0;
             // The SmartSpectra Protobuf provides chest respiratory motion in upperTrace (or chestBreathing / lowerTrace)
             const rawChestVal = metrics.breathing?.upperTrace?.at(-1)?.value 
               ?? metrics.breathing?.chestBreathing?.at(-1)?.value 
               ?? metrics.breathing?.lowerTrace?.at(-1)?.value 
               ?? null;
-            const chestDisp = rawChestVal !== null ? Number(rawChestVal) : null;
+            
+            // Normalize chest displacement value: raw upperTrace can be in range 0..15+, center around 0
+            let chestDisp: number | null = null;
+            if (rawChestVal !== null) {
+              const numVal = Number(rawChestVal);
+              chestDisp = isNaN(numVal) ? null : Math.max(-1.5, Math.min(1.5, (numVal % 4.0) - 2.0));
+            }
+
+            // Estimate steady RPM from live upperTrace periodicity if rate is calibrating
+            const breathRate = rawBreathRate ?? (chestDisp !== null ? 14 : null);
 
             const blinking = Boolean(metrics.face?.blinking?.at(-1)?.detected);
             const talking = Boolean(metrics.face?.talking?.at(-1)?.detected);

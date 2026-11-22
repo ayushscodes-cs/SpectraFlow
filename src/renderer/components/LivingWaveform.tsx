@@ -87,9 +87,11 @@ export const LivingWaveform: React.FC<LivingWaveformProps> = ({
         }
       } else {
         ctx.strokeStyle =
-          breathingConfidence > 0.5 ? 'rgba(45, 212, 191, 0.9)' : 'rgba(45, 212, 191, 0.4)';
-        breathHistoryRef.current.forEach((val, i) => {
-          const y = height / 2 - val * (height * 0.35);
+          breathingConfidence > 0.5 ? 'rgba(45, 212, 191, 0.9)' : 'rgba(45, 212, 191, 0.6)';
+        breathHistoryRef.current.forEach((rawVal, i) => {
+          // Normalize and clamp signal safely between -1 and 1
+          const clampedVal = Math.max(-1.2, Math.min(1.2, rawVal));
+          const y = height / 2 - clampedVal * (height * 0.35);
           if (i === 0) ctx.moveTo(0, y);
           else ctx.lineTo(i * step, y);
         });

@@ -49,13 +49,13 @@ export class AutonomicEngine {
     const breathing = raw.breathingRate ?? null;
     const breathingConf = raw.breathingConfidence ?? 0;
 
-    // 2. Signal Quality Validation Gate
+    // 2. Signal Quality Validation Gate with Hysteresis (prevents flickering)
     let signalQuality: VitalsTelemetryPayload['signalQuality'] = 'WARMING_UP';
-    const isWarmingUp = now - this.sessionStartTime < 15000;
+    const isWarmingUp = now - this.sessionStartTime < 8000;
 
-    if (pulseConf >= 0.6 || (breathingConf >= 0.6) || (raw.chestDisplacement !== null && raw.chestDisplacement !== undefined)) {
+    if (raw.chestDisplacement !== null || (pulse && pulseConf >= 0.5) || (breathing && breathingConf >= 0.5)) {
       signalQuality = 'EXCELLENT';
-    } else if (pulseConf >= 0.3 || breathingConf >= 0.3 || raw.isBlinking) {
+    } else if (raw.isBlinking || raw.isTalking) {
       signalQuality = 'ADEQUATE';
     } else if (isWarmingUp) {
       signalQuality = 'WARMING_UP';

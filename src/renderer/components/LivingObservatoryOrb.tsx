@@ -36,9 +36,10 @@ export const LivingObservatoryOrb: React.FC<LivingObservatoryOrbProps> = ({
 
       ctx.clearRect(0, 0, width, height);
 
-      // Modulate radius based on real breathing wave or gentle idle oscillation
-      const breathMod = breathingWave !== null ? breathingWave * 18 : Math.sin(phaseRef.current) * 8;
-      const baseRadius = 85 + breathMod;
+      // Safe bounded modulation based on real breathing wave or gentle idle oscillation
+      const safeBreath = breathingWave !== null && !isNaN(breathingWave) ? Math.max(-1.5, Math.min(1.5, breathingWave)) : Math.sin(phaseRef.current) * 0.4;
+      const breathMod = safeBreath * 16;
+      const baseRadius = Math.max(40, Math.min(130, 85 + breathMod));
 
       // Color scheme according to state
       let primaryColor = 'rgba(45, 212, 191, '; // Teal
